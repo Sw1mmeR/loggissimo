@@ -76,26 +76,47 @@ class Raspberry(Device):
 
 
 def main():
-    processes: List[Process] = list()
+    logger.info("test")
 
-    ap = AccessPoint()
-    rpi = Raspberry()
+    logger.add("logger.log")
 
-    processes.append(Process(target=ap.send, args=("ifconfig",)))
-    processes.append(Process(target=rpi.send, args=("ip a",)))
+    logger.info("!!!")
 
-    [proc.start() for proc in processes]
-    [proc.join() for proc in processes]
+    logger.clear()
 
-    for inst in Logger._instances.keys():
-        print(inst)
+    logger.remove(1)
 
-    logger.remove("AccessPoint")
+    logger.info("testest")
 
-    logger.info()
+    logger.add(sys.stdout)
 
-    for inst in _Logger._instances.keys():
-        print(inst)
+    logger.debug("traces :)")
+    # log = Logger("file_l", "test.log")
+    # log.info("Hello")
+    # log.add(sys.stdout)
+
+    # log.info("Not hello")
+    # logger.info("test")
+    # processes: List[Process] = list()
+
+    # ap = AccessPoint()
+    # rpi = Raspberry()
+
+    # processes.append(Process(target=ap.send, args=("ifconfig",)))
+    # processes.append(Process(target=rpi.send, args=("ip a",)))
+
+    # [proc.start() for proc in processes]
+    # [proc.join() for proc in processes]
+
+    # for inst in Logger._instances.keys():
+    #     print(inst)
+
+    # logger.remove("AccessPoint")
+
+    # logger.info()
+
+    # for inst in _Logger._instances.keys():
+    #     print(inst)
     # logger = Logger()
     # logger.info("Hello World!")
 
