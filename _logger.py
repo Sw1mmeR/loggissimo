@@ -1,4 +1,5 @@
 import sys
+from sys import stdout
 
 from typing import IO, Self
 from datetime import datetime
@@ -44,6 +45,10 @@ class _Logger(metaclass=__LoggerMeta):
 
 
 class Logger(_Logger):
+
+    def __init__(self, file: str = "", *args, **kwargs) -> None:
+        super().__init__(open(file, "a") if file else sys.stdout, *args, **kwargs)
+
     def info(self, message: str = ""):
         self._log(Level.INFO, message)
 
