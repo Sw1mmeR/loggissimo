@@ -1,15 +1,15 @@
 import sys
-from sys import stdout
 import traceback
 
-from typing import IO, Callable, Self
+from sys import stdout
 from datetime import datetime
+from colorama import Fore, init
+from typing import IO, Callable, List, Literal, Self
 from weakref import WeakValueDictionary
 
-from colorama import Fore, init
-
-from constants import DEFAULT_LOGGER_NAME, Level
-from exceptions import LoggissimoError
+from ._utils import print_trace
+from .exceptions import LoggissimoError
+from .constants import DEFAULT_LOGGER_NAME, END_LOGGER_TRACE, START_LOGGER_TRACE, Level
 
 init(autoreset=True)
 
@@ -39,20 +39,13 @@ class _Logger(metaclass=__LoggerMeta):
             try:
                 return func(*args, **kwargs)
             except Exception as ex:
-                print("=" * 64 + "[Start Logissimo Trace]" + "=" * 64)
-                print()
-
-                for trace in traceback.format_tb(ex.__traceback__):
-                    print(trace)
-
-                print()
-                print("=" * 64 + "[End Logissimo Trace]" + "=" * 64)
+                print_trace(traceback.format_tb(ex.__traceback__))
 
         return _decorator
 
     def _log(self, level: Level, message: str):
         dt = datetime.now()
-        msg = f"{Fore.YELLOW}[{self._name_:^12}] {Fore.GREEN}{dt.strftime('%Y-%m-%d %H:%M:%S'):10} {Fore.RESET}| {Fore.CYAN}{str(level):<8} {Fore.RESET}| {message}\n"
+        msg = f"{Fore.YELLOW}[{self._name_:<12}] {Fore.GREEN}{dt.strftime('%Y-%m-%d %H:%M:%S'):10} {Fore.RESET}| {Fore.CYAN}{str(level):<8} {Fore.RESET}| {message}\n"
         if not self._streams:
             raise LoggissimoError(
                 "No streams found. It could have happened that you cleared the list of streams and then did not add a stream."

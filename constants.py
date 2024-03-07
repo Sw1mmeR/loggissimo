@@ -3,6 +3,9 @@ from typing import Final
 
 DEFAULT_LOGGER_NAME: Final[str] = "default"
 
+START_LOGGER_TRACE = "[Start Loggissimo Trace]"
+END_LOGGER_TRACE = "[End Loggissimo Trace]"
+
 
 class Level(IntEnum):
     TRACE = 5
