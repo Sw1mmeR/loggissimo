@@ -50,7 +50,7 @@ class _Logger(metaclass=__LoggerMeta):
         inst_name = _colorize(f"[{self._name_:<12}]", self._style.inst_name.color, self._style.inst_name.font_style)
         time = _colorize(f"{dt.strftime('%Y-%m-%d %H:%M:%S'):10}", self._style.time.color, self._style.time.font_style)
         levelname = _colorize(f"{str(level):<8}", self._style.level[level].color, self._style.levelname_fstyle)
-        _msg = _colorize(f"message", self._style.level[level].color, self._style.level[level].font_style)
+        _msg = _colorize(f"{message}", self._style.level[level].color, self._style.level[level].font_style)
         msg = f"{inst_name} {time} | {levelname} | {_msg}\n"
         if not self._streams:
             raise LoggissimoError(
