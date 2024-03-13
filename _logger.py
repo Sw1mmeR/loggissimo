@@ -6,11 +6,9 @@ import traceback
 from datetime import datetime
 from typing import IO, Callable, List, Literal, Self
 from weakref import WeakValueDictionary
-from ._utils import print_trace
-from style import Style
-from _colorizer import _colorize
-from style import Color, FontStyle
 from _utils import print_trace
+
+from style import Style
 from _colorizer import _colorize
 from style import Color, FontStyle
 from exceptions import LoggissimoError
