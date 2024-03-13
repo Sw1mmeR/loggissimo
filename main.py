@@ -76,8 +76,11 @@ class Raspberry(Device):
 
 
 def main():
+    logger.add("test.log")
     test_func()
     logger.info("test2")
+    for _ in range(100):
+        logger.info(_)
     # logger.debug("test")
     # logger.trace("test")
     # logger.success("test")

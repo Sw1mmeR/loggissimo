@@ -31,7 +31,8 @@ class _Logger(metaclass=__LoggerMeta):
         return super().__new__(cls)
 
     def __init__(self, stream: IO = sys.stdout, *args, **kwargs) -> None:
-        self._name_ = kwargs["name"]
+        self._name_ = kwargs.get("name", DEFAULT_LOGGER_NAME)
+        self._force_colorize: bool = False
         self._streams = [stream]
         self._style: Style = kwargs.get("style", Style())
 
@@ -46,39 +47,50 @@ class _Logger(metaclass=__LoggerMeta):
         return _decorator
 
     def _log(self, level: Level, message: str):
+        def colorize():
+            inst_name = _colorize(
+                f"[{self._name_:<12}]",
+                self._style.inst_name.color,
+                self._style.inst_name.font_style,
+            )
+            time = _colorize(
+                f"{time_now:10}",
+                self._style.time.color,
+                self._style.time.font_style,
+            )
+            levelname = _colorize(
+                f"{str(level):<8}",
+                self._style.level[level].color,
+                self._style.levelname_fstyle,
+            )
+            _message = _colorize(
+                f"{message}",
+                self._style.level[level].color,
+                self._style.level[level].font_style,
+            )
+            return f"{inst_name} {time} | {levelname} | {trace_line} - {_message}\n"
+
         dt = datetime.now()
+        time = time_now = dt.strftime("%Y-%m-%d %H:%M:%S")
 
         # Пропускаем 3 вызова - '_log()', 'info()', '_decorator()'
         frame = inspect.stack()[3]
         trace_line = f"{frame.filename.split('/')[-1]}:{frame.function}:{frame.lineno}"
-
-        inst_name = _colorize(
-            f"[{self._name_:<12}]",
-            self._style.inst_name.color,
-            self._style.inst_name.font_style,
-        )
-        time = _colorize(
-            f"{dt.strftime('%Y-%m-%d %H:%M:%S'):10}",
-            self._style.time.color,
-            self._style.time.font_style,
-        )
-        levelname = _colorize(
-            f"{str(level):<8}",
-            self._style.level[level].color,
-            self._style.levelname_fstyle,
-        )
-        _msg = _colorize(
-            f"{message}",
-            self._style.level[level].color,
-            self._style.level[level].font_style,
-        )
-        msg = f"{inst_name} {time} | {levelname} | {trace_line} - {_msg}\n"
+        inst_name = f"[{self._name_:<12}]"
+        levelname = str(level)
+        _message = message
+        msg = f"{inst_name} {time} | {levelname} | {trace_line} - {_message}\n"
         if not self._streams:
             raise LoggissimoError(
                 "No streams found. It could have happened that you cleared the list of streams and then did not add a stream."
             )
         for stream in self._streams:
-            stream.write(msg)
+            msg2stream = msg
+            if self._force_colorize:
+                msg2stream = colorize()
+            elif stream.name == "<stdout>":
+                msg2stream = colorize()
+            stream.write(msg2stream)
 
     def __del__(self) -> None:
         for stream in self._streams:
