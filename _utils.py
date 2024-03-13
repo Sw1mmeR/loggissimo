@@ -2,8 +2,7 @@ import math
 import shutil
 
 from typing import List
-
-from .constants import END_LOGGER_TRACE, START_LOGGER_TRACE
+from constants import END_LOGGER_TRACE, START_LOGGER_TRACE
 
 
 def print_trace(traces: List[str], line_char: str = "=") -> None:

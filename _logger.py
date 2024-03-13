@@ -1,19 +1,16 @@
 import sys
 import traceback
 
-from sys import stdout
 from datetime import datetime
 from typing import IO, Callable, List, Literal, Self
 from weakref import WeakValueDictionary
-
 from ._utils import print_trace
-from .exceptions import LoggissimoError
-from .constants import DEFAULT_LOGGER_NAME, END_LOGGER_TRACE, START_LOGGER_TRACE, Level
-from .style import Style
-from ._colorizer import _colorize
-from .style import Color, FontStyle
-
-init(autoreset=True)
+from style import Style
+from _colorizer import _colorize
+from style import Color, FontStyle
+from _utils import print_trace
+from exceptions import LoggissimoError
+from constants import DEFAULT_LOGGER_NAME, Level
 
 
 class __LoggerMeta(type):
@@ -43,14 +40,31 @@ class _Logger(metaclass=__LoggerMeta):
                 return func(*args, **kwargs)
             except Exception as ex:
                 print_trace(traceback.format_tb(ex))
+
         return _decorator
 
     def _log(self, level: Level, message: str):
         dt = datetime.now()
-        inst_name = _colorize(f"[{self._name_:<12}]", self._style.inst_name.color, self._style.inst_name.font_style)
-        time = _colorize(f"{dt.strftime('%Y-%m-%d %H:%M:%S'):10}", self._style.time.color, self._style.time.font_style)
-        levelname = _colorize(f"{str(level):<8}", self._style.level[level].color, self._style.levelname_fstyle)
-        _msg = _colorize(f"{message}", self._style.level[level].color, self._style.level[level].font_style)
+        inst_name = _colorize(
+            f"[{self._name_:<12}]",
+            self._style.inst_name.color,
+            self._style.inst_name.font_style,
+        )
+        time = _colorize(
+            f"{dt.strftime('%Y-%m-%d %H:%M:%S'):10}",
+            self._style.time.color,
+            self._style.time.font_style,
+        )
+        levelname = _colorize(
+            f"{str(level):<8}",
+            self._style.level[level].color,
+            self._style.levelname_fstyle,
+        )
+        _msg = _colorize(
+            f"{message}",
+            self._style.level[level].color,
+            self._style.level[level].font_style,
+        )
         msg = f"{inst_name} {time} | {levelname} | {_msg}\n"
         if not self._streams:
             raise LoggissimoError(
@@ -112,6 +126,3 @@ class Logger(_Logger):
     @_Logger.catch
     def clear(self) -> None:
         self._streams.clear()
-
-
-
