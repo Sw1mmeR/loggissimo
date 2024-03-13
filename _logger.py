@@ -30,12 +30,34 @@ class _Logger(metaclass=__LoggerMeta):
     def __new__(cls, *args, **kwargs) -> Self:
         return super().__new__(cls)
 
-    def __init__(self, stream: IO = sys.stdout, *args, **kwargs) -> None:
+    def __init__(
+            self, 
+            stream: IO = sys.stdout, 
+            level: Level = Level.WARNING,
+            *args, 
+            **kwargs
+            ) -> None:
         self._name_ = kwargs.get("name", DEFAULT_LOGGER_NAME)
         self._force_colorize: bool = False
         self._streams = [stream]
         self._style: Style = kwargs.get("style", Style())
-
+        self._level = level
+        self._cache: dict = {}
+    
+    def _is_enabled(self, level: Level) -> bool:
+        """
+        Checking logging capability
+        """
+        try:
+            return self._cache[level]
+        except KeyError:
+            print("cant get from cache")
+            self._cache[level] = self._valid_log_level(level)
+            return self._cache[level]
+    
+    def _valid_log_level(self, level):
+        return level >= self._level
+    
     @staticmethod
     def catch(func: Callable):
         def _decorator(*args, **kwargs):
@@ -50,23 +72,27 @@ class _Logger(metaclass=__LoggerMeta):
         def colorize():
             inst_name = _colorize(
                 f"[{self._name_:<12}]",
-                self._style.inst_name.color,
+                self._style.inst_name.text_color,
                 self._style.inst_name.font_style,
+                self._style.inst_name.background_color
             )
             time = _colorize(
                 f"{time_now:10}",
-                self._style.time.color,
+                self._style.time.text_color,
                 self._style.time.font_style,
+                self._style.time.background_color
             )
             levelname = _colorize(
                 f"{str(level):<8}",
-                self._style.level[level].color,
+                self._style.level[level].text_color,
                 self._style.levelname_fstyle,
+                self._style.level[level].background_color
             )
             _message = _colorize(
                 f"{message}",
-                self._style.level[level].color,
+                self._style.level[level].text_color,
                 self._style.level[level].font_style,
+                self._style.level[level].background_color
             )
             return f"{inst_name} {time} | {levelname} | {trace_line} - {_message}\n"
 
@@ -99,36 +125,48 @@ class _Logger(metaclass=__LoggerMeta):
 
 class Logger(_Logger):
 
-    def __init__(self, file: str = "", *args, **kwargs) -> None:
-        super().__init__(open(file, "a") if file else sys.stdout, *args, **kwargs)
+    def __init__(
+            self, file: str = "", level: Level = Level.WARNING, *args, **kwargs
+            ) -> None:
+        super().__init__(
+            open(file, "a") if file else sys.stdout,
+            level if level in Level else Level.WARNING,
+            *args, **kwargs)
 
     @_Logger.catch
     def info(self, message: str = "") -> None:
-        self._log(Level.INFO, message)
+        if super()._is_enabled(Level.INFO):
+            self._log(Level.INFO, message)
 
     @_Logger.catch
     def debug(self, message: str = "") -> None:
-        self._log(Level.DEBUG, message)
+        if super()._is_enabled(Level.DEBUG):
+            self._log(Level.DEBUG, message)
 
     @_Logger.catch
     def trace(self, message: str = "") -> None:
-        self._log(Level.TRACE, message)
+        if super()._is_enabled(Level.TRACE):
+            self._log(Level.TRACE, message)
 
     @_Logger.catch
     def success(self, message: str = "") -> None:
-        self._log(Level.SUCCESS, message)
+        if super()._is_enabled(Level.SUCCESS):
+            self._log(Level.SUCCESS, message)
 
     @_Logger.catch
     def warning(self, message: str = "") -> None:
-        self._log(Level.WARNING, message)
+        if super()._is_enabled(Level.WARNING):
+            self._log(Level.WARNING, message)
 
     @_Logger.catch
     def error(self, message: str = "") -> None:
-        self._log(Level.ERROR, message)
+        if super()._is_enabled(Level.ERROR):
+            self._log(Level.ERROR, message)
 
     @_Logger.catch
     def critical(self, message: str = "") -> None:
-        self._log(Level.CRITICAL, message)
+        if super()._is_enabled(Level.CRITICAL):
+            self._log(Level.CRITICAL, message)
 
     @_Logger.catch
     def add(self, stream: IO | str) -> None:

@@ -34,11 +34,11 @@ class _FontStyle(Enum):
 
     def __str__(self) -> str:
         return self.value
-    
 
 def _colorize(text: str,
-              color: Optional[_Colors] = None, 
-              style: Optional[_FontStyle] = None) -> str:
+              color: _Colors = _Colors.DEFAULT, 
+              style: _FontStyle = _FontStyle.DEFAULT,
+              background: _Colors = _Colors.DEFAULT) -> str:
     """
     Colorize text and return it
 
@@ -49,8 +49,24 @@ def _colorize(text: str,
     Return:
         str - colorized and styled text
     """
-    _color = color if color else ""
-    _style = style if style else ""
-    code = "" if _color == _style else f"\u001b[{_style};{_color}m"
+    # Определяем коды
+    _color = color
+    _style = style
+    if background.value:
+        _back = int(str(background)) + 10
+    else:
+        _back = ""
+
+    # cобираем открывающий код
+    code = "" 
+    if _color != _style != _back:
+        first = ''
+        second = ''
+        if _color and _style or _style and _back:
+            first = ';'
+        if _color and _back:
+            second = ';'
+        code = f"\u001b[{_style}{first}{_color}{second}{_back}m"
+
     ender = "\u001b[0m"
     return f"{code}{text}{ender}"
