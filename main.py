@@ -1,20 +1,16 @@
 #!/bin/python3
 
-import io
-from multiprocessing import Process
 import os
 import sys
-import time
-from typing import List
-from _logger import Logger, _Logger
+from _logger import Logger
 
 sys.path.append(
     os.path.abspath(os.path.join(os.path.dirname(__file__), os.path.pardir))
 )
 
-from loggissimo import logger
+# from loggissimo import logger
 
-# logger.info()
+logger = Logger()
 
 
 class Device:
@@ -25,6 +21,10 @@ class Device:
     def send(self, cmd: str):
         self.logger.debug(f"Send {cmd}")
         return "response"
+
+
+def test_func():
+    logger.info("test")
 
 
 class AccessPoint(Device):
@@ -76,21 +76,29 @@ class Raspberry(Device):
 
 
 def main():
-    logger.info("test")
+    test_func()
+    logger.info("test2")
+    # logger.debug("test")
+    # logger.trace("test")
+    # logger.success("test")
+    # logger.error("test")
+    # logger.critical("test")
 
-    logger.add("logger.log")
+    # logger.info("test")
 
-    logger.info("!!!")
+    # logger.add("logger.log")
 
-    logger.clear()
+    # logger.info("!!!")
 
-    logger.remove(1)
+    # logger.clear()
 
-    logger.info("testest")
+    # logger.remove(1)
 
-    logger.add(sys.stdout)
+    # logger.info("testest")
 
-    logger.debug("traces :)")
+    # logger.add(sys.stdout)
+
+    # logger.debug("traces :)")
     # log = Logger("file_l", "test.log")
     # log.info("Hello")
     # log.add(sys.stdout)

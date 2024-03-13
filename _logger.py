@@ -1,3 +1,5 @@
+import inspect
+import os
 import sys
 import traceback
 
@@ -9,6 +11,8 @@ from style import Style
 from _colorizer import _colorize
 from style import Color, FontStyle
 from _utils import print_trace
+from _colorizer import _colorize
+from style import Color, FontStyle
 from exceptions import LoggissimoError
 from constants import DEFAULT_LOGGER_NAME, Level
 
@@ -45,6 +49,11 @@ class _Logger(metaclass=__LoggerMeta):
 
     def _log(self, level: Level, message: str):
         dt = datetime.now()
+
+        # Пропускаем 3 вызова - '_log()', 'info()', '_decorator()'
+        frame = inspect.stack()[3]
+        trace_line = f"{frame.filename.split('/')[-1]}:{frame.function}:{frame.lineno}"
+
         inst_name = _colorize(
             f"[{self._name_:<12}]",
             self._style.inst_name.color,
@@ -65,7 +74,7 @@ class _Logger(metaclass=__LoggerMeta):
             self._style.level[level].color,
             self._style.level[level].font_style,
         )
-        msg = f"{inst_name} {time} | {levelname} | {_msg}\n"
+        msg = f"{inst_name} {time} | {levelname} | {trace_line} - {_msg}\n"
         if not self._streams:
             raise LoggissimoError(
                 "No streams found. It could have happened that you cleared the list of streams and then did not add a stream."
