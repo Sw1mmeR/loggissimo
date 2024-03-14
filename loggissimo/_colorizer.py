@@ -1,10 +1,11 @@
 from enum import Enum
 from typing import Optional
 
+
 # Colors and styles codes
 class _Colors(Enum):
     """
-    Codes for text colors 
+    Codes for text colors
     """
 
     BLACK = "30"
@@ -13,13 +14,13 @@ class _Colors(Enum):
     YELLOW = "33"
     BLUE = "34"
     MAGENTA = "35"
-    CYAN    = "36"
+    CYAN = "36"
     WHITE = "37"
     DEFAULT = ""
-    
+
     def __str__(self) -> str:
         return self.value
-    
+
 
 class _FontStyle(Enum):
     """
@@ -35,10 +36,13 @@ class _FontStyle(Enum):
     def __str__(self) -> str:
         return self.value
 
-def _colorize(text: str,
-              color: _Colors = _Colors.DEFAULT, 
-              style: _FontStyle = _FontStyle.DEFAULT,
-              background: _Colors = _Colors.DEFAULT) -> str:
+
+def _colorize(
+    text: str,
+    color: _Colors = _Colors.DEFAULT,
+    style: _FontStyle = _FontStyle.DEFAULT,
+    background: _Colors = _Colors.DEFAULT,
+) -> str:
     """
     Colorize text and return it
 
@@ -52,20 +56,20 @@ def _colorize(text: str,
     # Определяем коды
     _color = color
     _style = style
-    if background.value:
-        _back = int(str(background)) + 10
+    if str(background.value):
+        _back = int(str(background.value)) + 10
     else:
         _back = ""
 
     # cобираем открывающий код
-    code = "" 
+    code = ""
     if _color != _style != _back:
-        first = ''
-        second = ''
+        first = ""
+        second = ""
         if _color and _style or _style and _back:
-            first = ';'
+            first = ";"
         if _color and _back:
-            second = ';'
+            second = ";"
         code = f"\u001b[{_style}{first}{_color}{second}{_back}m"
 
     ender = "\u001b[0m"

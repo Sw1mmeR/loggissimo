@@ -1,5 +1,5 @@
-from enum import IntEnum
 from typing import Final
+from enum import IntEnum
 
 DEFAULT_LOGGER_NAME: Final[str] = "default"
 

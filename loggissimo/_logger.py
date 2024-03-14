@@ -1,18 +1,17 @@
-import inspect
-import os
 import sys
 import traceback
 
 from datetime import datetime
-from typing import IO, Callable, List, Literal, Self
+from typing import IO, Callable, Self
 from weakref import WeakValueDictionary
-from _utils import print_trace
 
-from style import Style
-from _colorizer import _colorize
-from style import Color, FontStyle
-from exceptions import LoggissimoError
-from constants import DEFAULT_LOGGER_NAME, Level
+
+from .style import Style
+from ._utils import print_trace
+from ._colorizer import _colorize
+from .style import Color, FontStyle
+from .exceptions import LoggissimoError
+from .constants import DEFAULT_LOGGER_NAME, Level
 
 
 class __LoggerMeta(type):
@@ -61,7 +60,7 @@ class _Logger(metaclass=__LoggerMeta):
             try:
                 return func(*args, **kwargs)
             except Exception as ex:
-                print_trace(traceback.format_tb(ex))
+                print_trace(traceback.format_tb(ex.__traceback__), ex)
 
         return _decorator
 
@@ -69,42 +68,48 @@ class _Logger(metaclass=__LoggerMeta):
         def colorize():
             inst_name = _colorize(
                 f"[{self._name_:<12}]",
-                self._style.inst_name.text_color,
-                self._style.inst_name.font_style,
-                self._style.inst_name.background_color,
+                self._style.inst_name.text_color.value,
+                self._style.inst_name.font_style.value,
+                self._style.inst_name.background_color.value,
             )
             time = _colorize(
                 f"{time_now:10}",
-                self._style.time.text_color,
-                self._style.time.font_style,
-                self._style.time.background_color,
+                self._style.time.text_color.value,
+                self._style.time.font_style.value,
+                self._style.time.background_color.value,
             )
             levelname = _colorize(
                 f"{str(level):<8}",
-                self._style.level[level].text_color,
-                self._style.levelname_fstyle,
-                self._style.level[level].background_color,
+                self._style.level[level].text_color.value,
+                self._style.levelname_fstyle.value,
+                self._style.level[level].background_color.value,
+            )
+            frame_line = _colorize(
+                raw_frame_line,
+                self._style.frame.text_color.value,
+                self._style.frame.font_style.value,
+                self._style.frame.background_color.value,
             )
             _message = _colorize(
                 f"{message}",
-                self._style.level[level].text_color,
-                self._style.level[level].font_style,
-                self._style.level[level].background_color,
+                self._style.level[level].text_color.value,
+                self._style.level[level].font_style.value,
+                self._style.level[level].background_color.value,
             )
-            return f"{inst_name} {time} | {levelname} | {trace_line} - {_message}\n"
+            return f"{inst_name if self._name_ != DEFAULT_LOGGER_NAME else ''} {time} | {levelname} | {frame_line} - {_message}\n"
 
         dt = datetime.now()
         time = time_now = dt.strftime("%Y-%m-%d %H:%M:%S")
 
         # frame = inspect.stack()[3]
         frame = sys._getframe(3)
-        trace_line = (
+        raw_frame_line = (
             f"{frame.f_globals['__name__']}:{frame.f_code.co_name}:{frame.f_lineno}"
         )
         inst_name = f"[{self._name_:<12}]"
         levelname = str(level)
         _message = message
-        msg = f"{inst_name} {time} | {levelname} | {trace_line} - {_message}\n"
+        msg = f"{inst_name if self._name_ != DEFAULT_LOGGER_NAME else ''} {time} | {levelname} | {raw_frame_line} - {_message}\n"
         if not self._streams:
             raise LoggissimoError(
                 "No streams found. It could have happened that you cleared the list of streams and then did not add a stream."
