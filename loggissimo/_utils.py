@@ -44,5 +44,4 @@ def get_module_combinations(input_string: str) -> List[str]:
             current += "."
         current += word
         combinations.append(current)
-    combinations.reverse()
     return combinations

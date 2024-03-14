@@ -56,8 +56,6 @@ class _Logger(metaclass=__LoggerMeta):
             cached_module = self._modules[module]
             return cached_level and cached_module
         except KeyError:
-            # self._modules[module] = True
-            # cached_module = self._modules[module]
             modules: List[str] = get_module_combinations(module)
             for mod in modules:
                 cached_module = self._modules.get(mod, None)
