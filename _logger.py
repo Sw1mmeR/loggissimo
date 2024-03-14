@@ -117,6 +117,9 @@ class _Logger(metaclass=__LoggerMeta):
                 msg2stream = colorize()
             stream.write(msg2stream)
 
+    def __repr__(self) -> str:
+        return f"<loggissimo.logger streams={self._streams}>"
+
     def __del__(self) -> None:
         for stream in self._streams:
             stream.close()
@@ -141,7 +144,9 @@ class Logger(_Logger):
 
     @level.setter
     def level(self, level: Level) -> None:
-        self._level = self._valid_log_level(level)
+        if hasattr(self, "_cache"):
+            self._cache.clear()
+        self._level = level
 
     @_Logger.catch
     def info(self, message: str = "") -> None:
