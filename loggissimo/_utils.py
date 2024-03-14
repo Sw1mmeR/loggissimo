@@ -33,3 +33,16 @@ def print_trace(traces: List[str], ex: Exception, line_char: str = "=") -> None:
     [print(trace) for trace in traces]
     print(ex)
     print(end_trace_line.center(columns))
+
+
+def get_module_combinations(input_string: str) -> List[str]:
+    words = input_string.split(".")
+    combinations = []
+    current = ""
+    for word in words:
+        if current:
+            current += "."
+        current += word
+        combinations.append(current)
+    combinations.reverse()
+    return combinations

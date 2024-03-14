@@ -3,4 +3,4 @@ from .constants import Level
 
 logger = Logger()
 
-__version__ = "0.0.2"
+__version__ = "0.0.3"

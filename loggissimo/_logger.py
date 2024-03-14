@@ -2,12 +2,12 @@ import sys
 import traceback
 
 from datetime import datetime
-from typing import IO, Callable, Self
+from typing import IO, Callable, List, Optional, Self, Tuple, overload
 from weakref import WeakValueDictionary
 
 
 from .style import Style
-from ._utils import print_trace
+from ._utils import print_trace, get_module_combinations
 from ._colorizer import _colorize
 from .style import Color, FontStyle
 from .exceptions import LoggissimoError
@@ -40,16 +40,33 @@ class _Logger(metaclass=__LoggerMeta):
         self.level = level
         self._style: Style = kwargs.get("style", Style())
         self._cache: dict = {}
+        self._modules: dict = {}
 
-    def _is_enabled(self, level: Level) -> bool:
+    def _is_enabled(self, level: Level, module: str) -> bool:
         """
         Checking logging capability
         """
         try:
-            return self._cache[level]
+            cached_level = self._cache[level]
         except KeyError:
             self._cache[level] = self._valid_log_level(level)
-            return self._cache[level]
+            cached_level = self._cache[level]
+
+        try:
+            cached_module = self._modules[module]
+            return cached_level and cached_module
+        except KeyError:
+            # self._modules[module] = True
+            # cached_module = self._modules[module]
+            modules: List[str] = get_module_combinations(module)
+            for mod in modules:
+                cached_module = self._modules.get(mod, None)
+                if cached_module is not None:
+                    break
+                self._modules[mod] = True
+                cached_module = self._modules[mod]
+
+        return cached_level and cached_module
 
     def _valid_log_level(self, level: Level):
         return level >= self._level
@@ -100,12 +117,18 @@ class _Logger(metaclass=__LoggerMeta):
 
         dt = datetime.now()
         time = time_now = dt.strftime("%Y-%m-%d %H:%M:%S")
-
         # frame = inspect.stack()[3]
         frame = sys._getframe(3)
-        raw_frame_line = (
-            f"{frame.f_globals['__name__']}:{frame.f_code.co_name}:{frame.f_lineno}"
-        )
+
+        try:
+            module = frame.f_globals["__name__"]
+        except KeyError:
+            module = None
+
+        if not self._is_enabled(level, module):
+            return
+
+        raw_frame_line = f"{module}:{frame.f_code.co_name}:{frame.f_lineno}"
         inst_name = f"[{self._name_:<12}]"
         levelname = str(level)
         _message = message
@@ -121,6 +144,12 @@ class _Logger(metaclass=__LoggerMeta):
             elif stream.name == "<stdout>":
                 msg2stream = colorize()
             stream.write(msg2stream)
+
+    def _change_module_status(self, module: Optional[str], action: bool):
+        if not module:
+            for key in self._modules.keys():
+                self._modules[key] = action
+        self._modules[module] = action
 
     def __repr__(self) -> str:
         return f"<loggissimo.logger streams={self._streams}>"
@@ -153,46 +182,50 @@ class Logger(_Logger):
             self._cache.clear()
         self._level = level
 
+    @overload
+    def enable(self) -> None: ...
+
+    @overload
+    def enable(self, module: str) -> None: ...
+
+    def enable(self, module: Optional[str] = None) -> None:
+        self._change_module_status(module, True)
+
+    @overload
+    def disable(self) -> None: ...
+
+    @overload
+    def disable(self, module: str) -> None: ...
+
+    def disable(self, module: Optional[str] = None) -> None:
+        self._change_module_status(module, False)
+
     @_Logger.catch
     def info(self, message: str = "") -> None:
-        if not super()._is_enabled(Level.INFO):
-            return
         self._log(Level.INFO, message)
 
     @_Logger.catch
     def debug(self, message: str = "") -> None:
-        if not super()._is_enabled(Level.DEBUG):
-            return
         self._log(Level.DEBUG, message)
 
     @_Logger.catch
     def trace(self, message: str = "") -> None:
-        if not super()._is_enabled(Level.TRACE):
-            return
         self._log(Level.TRACE, message)
 
     @_Logger.catch
     def success(self, message: str = "") -> None:
-        if not super()._is_enabled(Level.SUCCESS):
-            return
         self._log(Level.SUCCESS, message)
 
     @_Logger.catch
     def warning(self, message: str = "") -> None:
-        if not super()._is_enabled(Level.WARNING):
-            return
         self._log(Level.WARNING, message)
 
     @_Logger.catch
     def error(self, message: str = "") -> None:
-        if not super()._is_enabled(Level.ERROR):
-            return
         self._log(Level.ERROR, message)
 
     @_Logger.catch
     def critical(self, message: str = "") -> None:
-        if not super()._is_enabled(Level.CRITICAL):
-            return
         self._log(Level.CRITICAL, message)
 
     @_Logger.catch
