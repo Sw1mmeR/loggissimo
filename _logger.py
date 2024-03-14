@@ -27,23 +27,21 @@ class __LoggerMeta(type):
 
 
 class _Logger(metaclass=__LoggerMeta):
+    _level = Level.INFO
+
     def __new__(cls, *args, **kwargs) -> Self:
         return super().__new__(cls)
 
     def __init__(
-            self, 
-            stream: IO = sys.stdout, 
-            level: Level = Level.WARNING,
-            *args, 
-            **kwargs
-            ) -> None:
+        self, stream: IO = sys.stdout, level: Level = Level.INFO, *args, **kwargs
+    ) -> None:
         self._name_ = kwargs.get("name", DEFAULT_LOGGER_NAME)
         self._force_colorize: bool = False
         self._streams = [stream]
+        self.level = level
         self._style: Style = kwargs.get("style", Style())
-        self._level = level
         self._cache: dict = {}
-    
+
     def _is_enabled(self, level: Level) -> bool:
         """
         Checking logging capability
@@ -51,13 +49,12 @@ class _Logger(metaclass=__LoggerMeta):
         try:
             return self._cache[level]
         except KeyError:
-            print("cant get from cache")
             self._cache[level] = self._valid_log_level(level)
             return self._cache[level]
-    
-    def _valid_log_level(self, level):
+
+    def _valid_log_level(self, level: Level):
         return level >= self._level
-    
+
     @staticmethod
     def catch(func: Callable):
         def _decorator(*args, **kwargs):
@@ -74,34 +71,36 @@ class _Logger(metaclass=__LoggerMeta):
                 f"[{self._name_:<12}]",
                 self._style.inst_name.text_color,
                 self._style.inst_name.font_style,
-                self._style.inst_name.background_color
+                self._style.inst_name.background_color,
             )
             time = _colorize(
                 f"{time_now:10}",
                 self._style.time.text_color,
                 self._style.time.font_style,
-                self._style.time.background_color
+                self._style.time.background_color,
             )
             levelname = _colorize(
                 f"{str(level):<8}",
                 self._style.level[level].text_color,
                 self._style.levelname_fstyle,
-                self._style.level[level].background_color
+                self._style.level[level].background_color,
             )
             _message = _colorize(
                 f"{message}",
                 self._style.level[level].text_color,
                 self._style.level[level].font_style,
-                self._style.level[level].background_color
+                self._style.level[level].background_color,
             )
             return f"{inst_name} {time} | {levelname} | {trace_line} - {_message}\n"
 
         dt = datetime.now()
         time = time_now = dt.strftime("%Y-%m-%d %H:%M:%S")
 
-        # Пропускаем 3 вызова - '_log()', 'info()', '_decorator()'
-        frame = inspect.stack()[3]
-        trace_line = f"{frame.filename.split('/')[-1]}:{frame.function}:{frame.lineno}"
+        # frame = inspect.stack()[3]
+        frame = sys._getframe(3)
+        trace_line = (
+            f"{frame.f_globals['__name__']}:{frame.f_code.co_name}:{frame.f_lineno}"
+        )
         inst_name = f"[{self._name_:<12}]"
         levelname = str(level)
         _message = message
@@ -126,60 +125,99 @@ class _Logger(metaclass=__LoggerMeta):
 class Logger(_Logger):
 
     def __init__(
-            self, file: str = "", level: Level = Level.WARNING, *args, **kwargs
-            ) -> None:
+        self, file: str = "", level: Level = Level.INFO, *args, **kwargs
+    ) -> None:
         super().__init__(
             open(file, "a") if file else sys.stdout,
-            level if level in Level else Level.WARNING,
-            *args, **kwargs)
+            level,
+            *args,
+            **kwargs,
+        )
+        self.level = level
+
+    @property
+    def level(self) -> Level:
+        return self._level
+
+    @level.setter
+    def level(self, level: Level) -> None:
+        self._level = self._valid_log_level(level)
 
     @_Logger.catch
     def info(self, message: str = "") -> None:
-        if super()._is_enabled(Level.INFO):
-            self._log(Level.INFO, message)
+        if not super()._is_enabled(Level.INFO):
+            return
+        self._log(Level.INFO, message)
 
     @_Logger.catch
     def debug(self, message: str = "") -> None:
-        if super()._is_enabled(Level.DEBUG):
-            self._log(Level.DEBUG, message)
+        if not super()._is_enabled(Level.DEBUG):
+            return
+        self._log(Level.DEBUG, message)
 
     @_Logger.catch
     def trace(self, message: str = "") -> None:
-        if super()._is_enabled(Level.TRACE):
-            self._log(Level.TRACE, message)
+        if not super()._is_enabled(Level.TRACE):
+            return
+        self._log(Level.TRACE, message)
 
     @_Logger.catch
     def success(self, message: str = "") -> None:
-        if super()._is_enabled(Level.SUCCESS):
-            self._log(Level.SUCCESS, message)
+        if not super()._is_enabled(Level.SUCCESS):
+            return
+        self._log(Level.SUCCESS, message)
 
     @_Logger.catch
     def warning(self, message: str = "") -> None:
-        if super()._is_enabled(Level.WARNING):
-            self._log(Level.WARNING, message)
+        if not super()._is_enabled(Level.WARNING):
+            return
+        self._log(Level.WARNING, message)
 
     @_Logger.catch
     def error(self, message: str = "") -> None:
-        if super()._is_enabled(Level.ERROR):
-            self._log(Level.ERROR, message)
+        if not super()._is_enabled(Level.ERROR):
+            return
+        self._log(Level.ERROR, message)
 
     @_Logger.catch
     def critical(self, message: str = "") -> None:
-        if super()._is_enabled(Level.CRITICAL):
-            self._log(Level.CRITICAL, message)
+        if not super()._is_enabled(Level.CRITICAL):
+            return
+        self._log(Level.CRITICAL, message)
 
     @_Logger.catch
     def add(self, stream: IO | str) -> None:
+        """
+        Add stream to logger instance output.
+
+        Args
+        ----
+            stream (IO | str): IO object or filename.
+        """
         if isinstance(stream, str):
             stream = open(stream, "a")
         self._streams.append(stream)
 
     @_Logger.catch
     def remove(self, id: int) -> None:
+        """
+        Remove output stream from logger instance output streams.
+
+        Args
+        ----
+            id (int): Stream index in logger streams list (streams are added in the order of calls of the add method).
+
+        Raises
+        ------
+            LoggissimoError: Stream not found
+        """
         if len(self._streams) < id:
-            raise LoggissimoError("No such stream!")
+            raise LoggissimoError("Stream not found")
         del self._streams[id]
 
     @_Logger.catch
     def clear(self) -> None:
+        """
+        Clear logger instance output streams list.
+        """
         self._streams.clear()
