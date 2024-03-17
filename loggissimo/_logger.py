@@ -4,18 +4,23 @@ import traceback
 from datetime import datetime
 from typing import IO, Callable, List, Optional, Self, Tuple, overload
 from weakref import WeakValueDictionary
+import multiprocessing
+import inspect
+import os
+import random
+import string
 
-
-from .style import Style
-from ._utils import print_trace, get_module_combinations
-from ._colorizer import _colorize
-from .style import Color, FontStyle
-from .exceptions import LoggissimoError
-from .constants import DEFAULT_LOGGER_NAME, Level
+from style import Style
+from _utils import print_trace, get_module_combinations
+from _colorizer import _colorize
+from style import Color, FontStyle
+from exceptions import LoggissimoError
+from constants import DEFAULT_LOGGER_NAME, Level
 
 
 class __LoggerMeta(type):
     _instances: WeakValueDictionary = WeakValueDictionary()
+    
 
     def __call__(cls, name: str = DEFAULT_LOGGER_NAME, *args, **kwargs):
         if name not in cls._instances.keys():
@@ -27,7 +32,8 @@ class __LoggerMeta(type):
 
 class _Logger(metaclass=__LoggerMeta):
     _level = Level.INFO
-
+    _lock: multiprocessing.synchronize.Lock = multiprocessing.Lock()
+    print(f"lock id = {id(_lock)}")
     def __new__(cls, *args, **kwargs) -> Self:
         return super().__new__(cls)
 
@@ -35,13 +41,36 @@ class _Logger(metaclass=__LoggerMeta):
         self, stream: IO = sys.stdout, level: Level = Level.INFO, *args, **kwargs
     ) -> None:
         self._name_ = kwargs.get("name", DEFAULT_LOGGER_NAME)
+        self._tmp_path = kwargs.get("tmp_path", self._get_default_tmp_path())
         self._force_colorize: bool = False
         self._streams = [stream]
         self.level = level
         self._style: Style = kwargs.get("style", Style())
         self._cache: dict = {}
         self._modules: dict = {}
+        self.in_thread: bool = self._check_threading()
+        print(f"THREAD is {self.in_thread}")
 
+    def _check_threading(self) -> bool:
+        """
+        Determine whether the logger is in a thread
+        """
+        try:
+            _threading = False
+            print("in check")
+            for frame in inspect.stack():
+                if "threading" in frame.filename or \
+                    "multiprocessing" in frame.filename:
+                    _threading = True
+            if _threading:
+                file_name = ''.join(random.choice(string.ascii_lowercase) for i in range(16))
+                self._tmp_file_path = os.path.abspath(f"{self._tmp_path}{file_name}")
+                self._tmp_out_stream: IO = open(self._tmp_file_path, 'w+')
+            print("end check")
+            return _threading
+        except Exception as e:
+            print("GET XYU: \n" + str(e))
+            return False
     def _is_enabled(self, level: Level, module: str) -> bool:
         """
         Checking logging capability
@@ -69,6 +98,10 @@ class _Logger(metaclass=__LoggerMeta):
     def _valid_log_level(self, level: Level):
         return level >= self._level
 
+    def _get_default_tmp_path(self):
+        # TODO check OS
+        return ""
+    
     @staticmethod
     def catch(func: Callable):
         def _decorator(*args, **kwargs):
@@ -135,12 +168,27 @@ class _Logger(metaclass=__LoggerMeta):
             raise LoggissimoError(
                 "No streams found. It could have happened that you cleared the list of streams and then did not add a stream."
             )
-        for stream in self._streams:
+        # Если в потоке, то не пишем в наши стримы
+        if self.in_thread:
+            self._write_msg_in_stream(self._tmp_out_stream, msg, True, colorize)
+        else:
+            for stream in self._streams:
+                self._write_msg_in_stream(stream, 
+                                          msg, self._force_colorize, colorize)
+
+    def _write_msg_in_stream(self, 
+                            stream: IO, 
+                            msg: str, 
+                            force_colorize: bool, 
+                            colorizer,
+                            thread: bool = False
+                            ) -> None:
             msg2stream = msg
-            if self._force_colorize:
-                msg2stream = colorize()
+            if force_colorize:
+                msg2stream = colorizer()
             elif stream.name == "<stdout>":
-                msg2stream = colorize()
+                if not thread:
+                    msg2stream = colorizer()
             stream.write(msg2stream)
 
     def _change_module_status(self, module: Optional[str], action: bool):
@@ -153,6 +201,31 @@ class _Logger(metaclass=__LoggerMeta):
         return f"<loggissimo.logger streams={self._streams}>"
 
     def __del__(self) -> None:
+        # Если были в потоках, то надо подчистить все за собой
+        print(f"lock in del {id(self._lock)}")
+        if self.in_thread:
+            print("im in del epta")
+            self._tmp_out_stream.seek(0)
+            #while True:
+                #if self._lock.acquire():
+            print("IM here durak")
+            self._lock.acquire()
+            for line in self._tmp_out_stream:
+                print("Im in lines eba")
+                for stream in self._streams:
+                    self._write_msg_in_stream(
+                        stream,
+                        line,
+                        False,
+                        None,
+                        True
+                    )
+            self._lock.release()
+                   # break
+            print("IM here loh")
+            self._tmp_out_stream.close()
+            os.remove(self._tmp_file_path)
+
         for stream in self._streams:
             stream.close()
 
@@ -227,13 +300,14 @@ class Logger(_Logger):
         self._log(Level.CRITICAL, message)
 
     @_Logger.catch
-    def add(self, stream: IO | str) -> None:
+    def add(self, stream: IO | str, cache_path: str) -> None:
         """
         Add stream to logger instance output.
 
         Args
         ----
             stream (IO | str): IO object or filename.
+            cache_path (str): path for creation temporary files
         """
         if isinstance(stream, str):
             stream = open(stream, "a")
@@ -262,3 +336,25 @@ class Logger(_Logger):
         Clear logger instance output streams list.
         """
         self._streams.clear()
+        
+def test(st):
+    log = Logger(name = st,)
+    log.info(f"start{time.asctime()}")
+    time.sleep(2)
+    log.error(f"end{time.asctime()}")
+import time
+if __name__ == "__main__":
+    
+    locker = multiprocessing.Lock()
+    
+    procs = []
+    # instantiating process with arguments
+    for name in range(2):
+        # print(name)
+        proc = multiprocessing.Process(target=test, args=(f"process{name}",))
+        procs.append(proc)
+        proc.start()
+
+    # complete the processes
+    for proc in procs:
+        proc.join()
