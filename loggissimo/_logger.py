@@ -5,10 +5,12 @@ from datetime import datetime
 from typing import IO, Callable, List, Optional, Self, Tuple, overload
 from weakref import WeakValueDictionary
 import multiprocessing
+import threading
 import inspect
 import os
 import random
 import string
+import tempfile
 
 from style import Style
 from _utils import print_trace, get_module_combinations
@@ -32,24 +34,27 @@ class __LoggerMeta(type):
 
 class _Logger(metaclass=__LoggerMeta):
     _level = Level.INFO
-    _lock: multiprocessing.synchronize.Lock = multiprocessing.Lock()
-    print(f"lock id = {id(_lock)}")
     def __new__(cls, *args, **kwargs) -> Self:
         return super().__new__(cls)
 
     def __init__(
         self, stream: IO = sys.stdout, level: Level = Level.INFO, *args, **kwargs
     ) -> None:
-        self._name_ = kwargs.get("name", DEFAULT_LOGGER_NAME)
-        self._tmp_path = kwargs.get("tmp_path", self._get_default_tmp_path())
-        self._force_colorize: bool = False
+        self._name_:str = kwargs.get("name", DEFAULT_LOGGER_NAME)
+        self._tmp_path: str = kwargs.get("tmp_path", tempfile.gettempdir())
+        self._lock = kwargs.get("lock", multiprocessing.Lock())
+        self._disable_threads: bool = kwargs.get("disable_threads", False)
+        self._force_colorize: bool = kwargs.get("force_colorize", False)
+        self._format: str = kwargs.get("format", "[$instance_name] $time | $level | $program_line - $message")
+        self._message_template = string.Template(f"{self._format}\n")
+        self._style: Style = kwargs.get("style", Style())
         self._streams = [stream]
         self.level = level
-        self._style: Style = kwargs.get("style", Style())
         self._cache: dict = {}
         self._modules: dict = {}
+        self._proc_name = ""
         self.in_thread: bool = self._check_threading()
-        print(f"THREAD is {self.in_thread}")
+        
 
     def _check_threading(self) -> bool:
         """
@@ -57,20 +62,32 @@ class _Logger(metaclass=__LoggerMeta):
         """
         try:
             _threading = False
-            print("in check")
-            for frame in inspect.stack():
-                if "threading" in frame.filename or \
-                    "multiprocessing" in frame.filename:
-                    _threading = True
-            if _threading:
+            if multiprocessing.current_process().name != "MainProcess":
+                _threading = True
+                self._proc_name = multiprocessing.current_process().name
+
+            if threading.current_thread().name != "MainThread":
+                _threading = True
+                self._proc_name = threading.current_thread().name
+
+            if _threading and not self._disable_threads:
                 file_name = ''.join(random.choice(string.ascii_lowercase) for i in range(16))
-                self._tmp_file_path = os.path.abspath(f"{self._tmp_path}{file_name}")
+                self._tmp_file_path = os.path.abspath(f"{self._tmp_path}" + \
+                                                      f"{'' if self._tmp_path.endswith('/') else '/'}{file_name}")
                 self._tmp_out_stream: IO = open(self._tmp_file_path, 'w+')
-            print("end check")
+
             return _threading
-        except Exception as e:
-            print("GET XYU: \n" + str(e))
-            return False
+        
+        except FileNotFoundError as ex:
+            print_trace(traceback.format_tb(ex.__traceback__), ex, 
+                        "Specify the correct path for temporary files with the argument 'tmp_path'")
+
+        except PermissionError as ex:
+            print_trace(traceback.format_tb(ex.__traceback__), ex, 
+                        f"Probably a read-only path {self._tmp_path}")
+            
+        return False
+        
     def _is_enabled(self, level: Level, module: str) -> bool:
         """
         Checking logging capability
@@ -97,10 +114,6 @@ class _Logger(metaclass=__LoggerMeta):
 
     def _valid_log_level(self, level: Level):
         return level >= self._level
-
-    def _get_default_tmp_path(self):
-        # TODO check OS
-        return ""
     
     @staticmethod
     def catch(func: Callable):
@@ -115,7 +128,8 @@ class _Logger(metaclass=__LoggerMeta):
     def _log(self, level: Level, message: str):
         def colorize():
             inst_name = _colorize(
-                f"[{self._name_:<12}]",
+                f"[{self._name_:<6}{' (' if self._proc_name else ''}{self._proc_name:<6}"+\
+                    f"{')' if self._proc_name else ''}]",
                 self._style.inst_name.text_color.value,
                 self._style.inst_name.font_style.value,
                 self._style.inst_name.background_color.value,
@@ -144,8 +158,16 @@ class _Logger(metaclass=__LoggerMeta):
                 self._style.level[level].font_style.value,
                 self._style.level[level].background_color.value,
             )
-            return f"{inst_name if self._name_ != DEFAULT_LOGGER_NAME else ''} {time} | {levelname} | {frame_line} - {_message}\n"
-
+            #return f"{inst_name if self._name_ != DEFAULT_LOGGER_NAME else ''} {time} | {levelname} | {frame_line} - {_message}\n"
+            #[$instance_name] $time | $level | $program_line - $message
+            return self._message_template.safe_substitute(
+                instance_name = f"{inst_name if self._name_ != DEFAULT_LOGGER_NAME else ''}",
+                time = time,
+                level = levelname,
+                program_line = frame_line,
+                message = _message
+            )
+        
         dt = datetime.now()
         time = time_now = dt.strftime("%Y-%m-%d %H:%M:%S")
         # frame = inspect.stack()[3]
@@ -169,7 +191,7 @@ class _Logger(metaclass=__LoggerMeta):
                 "No streams found. It could have happened that you cleared the list of streams and then did not add a stream."
             )
         # Если в потоке, то не пишем в наши стримы
-        if self.in_thread:
+        if self.in_thread and not self._disable_threads:
             self._write_msg_in_stream(self._tmp_out_stream, msg, True, colorize)
         else:
             for stream in self._streams:
@@ -187,8 +209,9 @@ class _Logger(metaclass=__LoggerMeta):
             if force_colorize:
                 msg2stream = colorizer()
             elif stream.name == "<stdout>":
-                if not thread:
+                if not thread or self._disable_threads:
                     msg2stream = colorizer()
+
             stream.write(msg2stream)
 
     def _change_module_status(self, module: Optional[str], action: bool):
@@ -202,16 +225,10 @@ class _Logger(metaclass=__LoggerMeta):
 
     def __del__(self) -> None:
         # Если были в потоках, то надо подчистить все за собой
-        print(f"lock in del {id(self._lock)}")
-        if self.in_thread:
-            print("im in del epta")
+        if self.in_thread and not self._disable_threads:
             self._tmp_out_stream.seek(0)
-            #while True:
-                #if self._lock.acquire():
-            print("IM here durak")
             self._lock.acquire()
             for line in self._tmp_out_stream:
-                print("Im in lines eba")
                 for stream in self._streams:
                     self._write_msg_in_stream(
                         stream,
@@ -220,14 +237,15 @@ class _Logger(metaclass=__LoggerMeta):
                         None,
                         True
                     )
-            self._lock.release()
-                   # break
-            print("IM here loh")
+            
             self._tmp_out_stream.close()
             os.remove(self._tmp_file_path)
-
-        for stream in self._streams:
-            stream.close()
+            self._lock.release()
+        if not self.in_thread:
+            for stream in self._streams:
+                if stream.name != "<stdout>":
+                    stream.close()
+        
 
 
 class Logger(_Logger):
@@ -252,6 +270,25 @@ class Logger(_Logger):
         if hasattr(self, "_cache"):
             self._cache.clear()
         self._level = level
+    
+    @property
+    def format(self) -> str:
+        return self._format
+    
+    @format.setter
+    def format(self, format: str) -> None:
+        """
+        Set logger format. Pass a line like this as input:
+        '$instance_name $time | $level | $program_line - $message'
+        Where optional parameters:
+            $instance_name - name of logger instance;
+            $time - message time;
+            $level - log level;
+            $program_line - the line in which the message is called;
+            $message - log message;
+        """
+        self._format = format
+        self._message_template = string.Template(f"{self._format}\n")
 
     @overload
     def enable(self) -> None: ...
@@ -336,25 +373,3 @@ class Logger(_Logger):
         Clear logger instance output streams list.
         """
         self._streams.clear()
-        
-def test(st):
-    log = Logger(name = st,)
-    log.info(f"start{time.asctime()}")
-    time.sleep(2)
-    log.error(f"end{time.asctime()}")
-import time
-if __name__ == "__main__":
-    
-    locker = multiprocessing.Lock()
-    
-    procs = []
-    # instantiating process with arguments
-    for name in range(2):
-        # print(name)
-        proc = multiprocessing.Process(target=test, args=(f"process{name}",))
-        procs.append(proc)
-        proc.start()
-
-    # complete the processes
-    for proc in procs:
-        proc.join()
