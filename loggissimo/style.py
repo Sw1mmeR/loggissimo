@@ -2,8 +2,8 @@ from enum import Enum
 from typing import Tuple, Dict
 from collections import namedtuple
 
-from .constants import Level
-from ._colorizer import _Colors, _FontStyle
+from constants import Level
+from _colorizer import _Colors, _FontStyle
 
 
 class Color(Enum):
