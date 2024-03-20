@@ -118,7 +118,7 @@ class _Logger(metaclass=__LoggerMeta):
                 is_module, cached_module = _Logger._modules.get(mod, (False, None))
                 if cached_module is not None:
                     return cached_module
-                cached_module = _Logger._modules[mod] = (is_module, False)
+                cached_module = _Logger._modules[mod] = (is_module, True)
 
         return cached_level and cached_module
 
@@ -279,9 +279,11 @@ class Logger(_Logger):
         return self._level
 
     @level.setter
-    def level(self, level: Level) -> None:
+    def level(self, level: Level | str) -> None:
         if hasattr(self, "_cache"):
             self._cache.clear()
+        if isinstance(level, str):
+            level = Level[level]
         self._level = level
 
     @property
