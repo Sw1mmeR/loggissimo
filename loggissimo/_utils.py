@@ -3,10 +3,12 @@ import shutil
 
 from typing import List
 
-from constants import END_LOGGER_TRACE, START_LOGGER_TRACE
+from .constants import END_LOGGER_TRACE, START_LOGGER_TRACE
 
 
-def print_trace(traces: List[str], ex: Exception, advice: str = '', line_char: str = "=") -> None:
+def print_trace(
+    traces: List[str], ex: Exception, advice: str = "", line_char: str = "="
+) -> None:
     columns = shutil.get_terminal_size().columns
 
     half_start_columns = math.ceil((columns - len(START_LOGGER_TRACE)) / 2)

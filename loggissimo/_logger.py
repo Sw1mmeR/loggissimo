@@ -2,7 +2,7 @@ import sys
 import traceback
 
 from datetime import datetime
-from typing import IO, Callable, List, Optional, Self, Tuple, overload
+from typing import IO, Callable, Dict, List, Optional, Self, Tuple, overload
 from weakref import WeakValueDictionary
 import multiprocessing
 import threading
@@ -12,17 +12,16 @@ import random
 import string
 import tempfile
 
-from style import Style
-from _utils import print_trace, get_module_combinations
-from _colorizer import _colorize
-from style import Color, FontStyle
-from exceptions import LoggissimoError
-from constants import DEFAULT_LOGGER_NAME, Level
+from .style import Style
+from ._utils import print_trace, get_module_combinations
+from ._colorizer import _colorize
+from .style import Color, FontStyle
+from .exceptions import LoggissimoError
+from .constants import DEFAULT_LOGGER_NAME, Level
 
 
 class __LoggerMeta(type):
     _instances: WeakValueDictionary = WeakValueDictionary()
-    
 
     def __call__(cls, name: str = DEFAULT_LOGGER_NAME, *args, **kwargs):
         if name not in cls._instances.keys():
@@ -34,27 +33,29 @@ class __LoggerMeta(type):
 
 class _Logger(metaclass=__LoggerMeta):
     _level = Level.INFO
+    _modules: Dict[str, Tuple[bool, bool]] = {"__main__": (True, True)}
+
     def __new__(cls, *args, **kwargs) -> Self:
         return super().__new__(cls)
 
     def __init__(
         self, stream: IO = sys.stdout, level: Level = Level.INFO, *args, **kwargs
     ) -> None:
-        self._name_:str = kwargs.get("name", DEFAULT_LOGGER_NAME)
+        self._name_: str = kwargs.get("name", DEFAULT_LOGGER_NAME)
         self._tmp_path: str = kwargs.get("tmp_path", tempfile.gettempdir())
         self._lock = kwargs.get("lock", multiprocessing.Lock())
         self._disable_threads: bool = kwargs.get("disable_threads", False)
         self._force_colorize: bool = kwargs.get("force_colorize", False)
-        self._format: str = kwargs.get("format", "[$instance_name] $time | $level | $program_line - $message")
+        self._format: str = kwargs.get(
+            "format", "$instance_name $time | $level | $program_line - $message"
+        )
         self._message_template = string.Template(f"{self._format}\n")
         self._style: Style = kwargs.get("style", Style())
         self._streams = [stream]
         self.level = level
         self._cache: dict = {}
-        self._modules: dict = {}
         self._proc_name = ""
         self.in_thread: bool = self._check_threading()
-        
 
     def _check_threading(self) -> bool:
         """
@@ -71,23 +72,33 @@ class _Logger(metaclass=__LoggerMeta):
                 self._proc_name = threading.current_thread().name
 
             if _threading and not self._disable_threads:
-                file_name = ''.join(random.choice(string.ascii_lowercase) for i in range(16))
-                self._tmp_file_path = os.path.abspath(f"{self._tmp_path}" + \
-                                                      f"{'' if self._tmp_path.endswith('/') else '/'}{file_name}")
-                self._tmp_out_stream: IO = open(self._tmp_file_path, 'w+')
+                file_name = "".join(
+                    random.choice(string.ascii_lowercase) for i in range(16)
+                )
+                self._tmp_file_path = os.path.abspath(
+                    f"{self._tmp_path}"
+                    + f"{'' if self._tmp_path.endswith('/') else '/'}{file_name}"
+                )
+                self._tmp_out_stream: IO = open(self._tmp_file_path, "w+")
 
             return _threading
-        
+
         except FileNotFoundError as ex:
-            print_trace(traceback.format_tb(ex.__traceback__), ex, 
-                        "Specify the correct path for temporary files with the argument 'tmp_path'")
+            print_trace(
+                traceback.format_tb(ex.__traceback__),
+                ex,
+                "Specify the correct path for temporary files with the argument 'tmp_path'",
+            )
 
         except PermissionError as ex:
-            print_trace(traceback.format_tb(ex.__traceback__), ex, 
-                        f"Probably a read-only path {self._tmp_path}")
-            
+            print_trace(
+                traceback.format_tb(ex.__traceback__),
+                ex,
+                f"Probably a read-only path {self._tmp_path}",
+            )
+
         return False
-        
+
     def _is_enabled(self, level: Level, module: str) -> bool:
         """
         Checking logging capability
@@ -99,22 +110,21 @@ class _Logger(metaclass=__LoggerMeta):
             cached_level = self._cache[level]
 
         try:
-            cached_module = self._modules[module]
+            is_module, cached_module = _Logger._modules[module]
             return cached_level and cached_module
         except KeyError:
             modules: List[str] = get_module_combinations(module)
             for mod in modules:
-                cached_module = self._modules.get(mod, None)
+                is_module, cached_module = _Logger._modules.get(mod, (False, None))
                 if cached_module is not None:
-                    break
-                self._modules[mod] = True
-                cached_module = self._modules[mod]
+                    return cached_module
+                cached_module = _Logger._modules[mod] = (is_module, False)
 
         return cached_level and cached_module
 
     def _valid_log_level(self, level: Level):
         return level >= self._level
-    
+
     @staticmethod
     def catch(func: Callable):
         def _decorator(*args, **kwargs):
@@ -128,8 +138,8 @@ class _Logger(metaclass=__LoggerMeta):
     def _log(self, level: Level, message: str):
         def colorize():
             inst_name = _colorize(
-                f"[{self._name_:<6}{' (' if self._proc_name else ''}{self._proc_name:<6}"+\
-                    f"{')' if self._proc_name else ''}]",
+                f"[{self._name_:<12}{' (' if self._proc_name else ''}{f'{self._proc_name:<12}' if self._proc_name else ''}"
+                + f"{')' if self._proc_name else ''}]",
                 self._style.inst_name.text_color.value,
                 self._style.inst_name.font_style.value,
                 self._style.inst_name.background_color.value,
@@ -158,19 +168,16 @@ class _Logger(metaclass=__LoggerMeta):
                 self._style.level[level].font_style.value,
                 self._style.level[level].background_color.value,
             )
-            #return f"{inst_name if self._name_ != DEFAULT_LOGGER_NAME else ''} {time} | {levelname} | {frame_line} - {_message}\n"
-            #[$instance_name] $time | $level | $program_line - $message
             return self._message_template.safe_substitute(
-                instance_name = f"{inst_name if self._name_ != DEFAULT_LOGGER_NAME else ''}",
-                time = time,
-                level = levelname,
-                program_line = frame_line,
-                message = _message
-            )
-        
+                instance_name=f"{inst_name if self._name_ != DEFAULT_LOGGER_NAME else ''}",
+                time=time,
+                level=levelname,
+                program_line=frame_line,
+                message=_message,
+            ).lstrip()
+
         dt = datetime.now()
         time = time_now = dt.strftime("%Y-%m-%d %H:%M:%S")
-        # frame = inspect.stack()[3]
         frame = sys._getframe(3)
 
         try:
@@ -182,10 +189,17 @@ class _Logger(metaclass=__LoggerMeta):
             return
 
         raw_frame_line = f"{module}:{frame.f_code.co_name}:{frame.f_lineno}"
-        inst_name = f"[{self._name_:<12}]"
+        inst_name = f"[{self._name_:<10}]"
         levelname = str(level)
         _message = message
-        msg = f"{inst_name if self._name_ != DEFAULT_LOGGER_NAME else ''} {time} | {levelname} | {raw_frame_line} - {_message}\n"
+        msg = self._message_template.safe_substitute(
+            instance_name=f"{inst_name if self._name_ != DEFAULT_LOGGER_NAME else ''}",
+            time=time,
+            level=levelname,
+            program_line=raw_frame_line,
+            message=_message,
+        ).lstrip()
+        # msg = f"{inst_name if self._name_ != DEFAULT_LOGGER_NAME else ''} {time} | {levelname} | {raw_frame_line} - {_message}\n"
         if not self._streams:
             raise LoggissimoError(
                 "No streams found. It could have happened that you cleared the list of streams and then did not add a stream."
@@ -195,30 +209,36 @@ class _Logger(metaclass=__LoggerMeta):
             self._write_msg_in_stream(self._tmp_out_stream, msg, True, colorize)
         else:
             for stream in self._streams:
-                self._write_msg_in_stream(stream, 
-                                          msg, self._force_colorize, colorize)
+                self._write_msg_in_stream(stream, msg, self._force_colorize, colorize)
 
-    def _write_msg_in_stream(self, 
-                            stream: IO, 
-                            msg: str, 
-                            force_colorize: bool, 
-                            colorizer,
-                            thread: bool = False
-                            ) -> None:
-            msg2stream = msg
-            if force_colorize:
+    def _write_msg_in_stream(
+        self,
+        stream: IO,
+        msg: str,
+        force_colorize: bool,
+        colorizer,
+        thread: bool = False,
+    ) -> None:
+        msg2stream = msg
+        if force_colorize:
+            msg2stream = colorizer()
+        elif stream.name == "<stdout>":
+            if not thread or self._disable_threads:
                 msg2stream = colorizer()
-            elif stream.name == "<stdout>":
-                if not thread or self._disable_threads:
-                    msg2stream = colorizer()
 
-            stream.write(msg2stream)
+        stream.write(msg2stream)
 
-    def _change_module_status(self, module: Optional[str], action: bool):
-        if not module:
-            for key in self._modules.keys():
-                self._modules[key] = action
-        self._modules[module] = action
+    def _change_module_status(
+        self, module: Optional[str], action: bool, path: str = ""
+    ):
+        if module:
+            _Logger._modules[module] = (path == "__init__.py", action)
+            return
+
+        _Logger._modules = dict.fromkeys(
+            _Logger._modules.keys(), (path == "__init__.py", action)
+        )
+        return
 
     def __repr__(self) -> str:
         return f"<loggissimo.logger streams={self._streams}>"
@@ -230,14 +250,8 @@ class _Logger(metaclass=__LoggerMeta):
             self._lock.acquire()
             for line in self._tmp_out_stream:
                 for stream in self._streams:
-                    self._write_msg_in_stream(
-                        stream,
-                        line,
-                        False,
-                        None,
-                        True
-                    )
-            
+                    self._write_msg_in_stream(stream, line, False, None, True)
+
             self._tmp_out_stream.close()
             os.remove(self._tmp_file_path)
             self._lock.release()
@@ -245,7 +259,6 @@ class _Logger(metaclass=__LoggerMeta):
             for stream in self._streams:
                 if stream.name != "<stdout>":
                     stream.close()
-        
 
 
 class Logger(_Logger):
@@ -254,7 +267,7 @@ class Logger(_Logger):
         self, file: str = "", level: Level = Level.INFO, *args, **kwargs
     ) -> None:
         super().__init__(
-            open(file, "a") if file else sys.stdout,
+            open(file, "w") if file else sys.stdout,
             level,
             *args,
             **kwargs,
@@ -270,11 +283,11 @@ class Logger(_Logger):
         if hasattr(self, "_cache"):
             self._cache.clear()
         self._level = level
-    
+
     @property
     def format(self) -> str:
         return self._format
-    
+
     @format.setter
     def format(self, format: str) -> None:
         """
@@ -290,23 +303,22 @@ class Logger(_Logger):
         self._format = format
         self._message_template = string.Template(f"{self._format}\n")
 
-    @overload
-    def enable(self) -> None: ...
-
-    @overload
-    def enable(self, module: str) -> None: ...
-
     def enable(self, module: Optional[str] = None) -> None:
         self._change_module_status(module, True)
 
-    @overload
-    def disable(self) -> None: ...
+    def disable(self) -> None:
+        frame = inspect.stack()[1]
+        module = inspect.getmodule(frame[0])
 
-    @overload
-    def disable(self, module: str) -> None: ...
+        if not module:
+            return
+        path = module.__file__
 
-    def disable(self, module: Optional[str] = None) -> None:
-        self._change_module_status(module, False)
+        if not path:
+            return
+        file = path.split("/")[-1]
+
+        self._change_module_status(module.__name__, False, path=file)
 
     @_Logger.catch
     def info(self, message: str = "") -> None:
