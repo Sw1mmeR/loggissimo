@@ -51,12 +51,35 @@ class _Logger(metaclass=__LoggerMeta):
         )
         self._message_template = string.Template(f"{self._format}\n")
         self._style: Style = kwargs.get("style", Style())
+        self._trace_file_path: str = kwargs.get("tracefile", None)
+        self._trace_stream = self._open_tracefile()
         self._streams = [stream]
         self.level = level
         self._cache: dict = {}
         self._proc_name = ""
         self.in_thread: bool = self._check_threading()
 
+    def _open_tracefile(self):
+        if self._trace_file_path:
+            try:
+                path = os.path.abspath(self._trace_file_path)
+                return open(path, "w")
+            
+            except FileNotFoundError as ex:
+                print_trace(
+                    traceback.format_tb(ex.__traceback__),
+                    ex,
+                    "Specify the correct path for temporary files with the argument 'tracefile'",
+                )
+
+            except PermissionError as ex:
+                print_trace(
+                    traceback.format_tb(ex.__traceback__),
+                    ex,
+                    f"Probably a read-only path {self._trace_file_path}",
+                )
+        return None
+    
     def _check_threading(self) -> bool:
         """
         Determine whether the logger is in a thread
@@ -185,7 +208,8 @@ class _Logger(metaclass=__LoggerMeta):
         except KeyError:
             module = None
 
-        if not self._is_enabled(level, module):
+        # Если не задан трейсфайл и не проходим условия выдачи, то выходим
+        if not self._is_enabled(level, module) and not self._trace_stream:
             return
 
         raw_frame_line = f"{module}:{frame.f_code.co_name}:{frame.f_lineno}"
@@ -199,7 +223,15 @@ class _Logger(metaclass=__LoggerMeta):
             program_line=raw_frame_line,
             message=_message,
         ).lstrip()
-        # msg = f"{inst_name if self._name_ != DEFAULT_LOGGER_NAME else ''} {time} | {levelname} | {raw_frame_line} - {_message}\n"
+        
+        # Если задан трейсфайл, то выдаем в него
+        if self._trace_stream:
+            self._write_msg_in_stream(self._trace_stream, msg, False, colorize)
+        
+        # Если не проходим по условию, то выходим
+        if  not self._is_enabled(level, module):
+            return
+        
         if not self._streams:
             raise LoggissimoError(
                 "No streams found. It could have happened that you cleared the list of streams and then did not add a stream."
@@ -288,12 +320,8 @@ class Logger(_Logger):
 
     @property
     def format(self) -> str:
-        return self._format
-
-    @format.setter
-    def format(self, format: str) -> None:
         """
-        Set logger format. Pass a line like this as input:
+        Set logger format. String of the form:
         '$instance_name $time | $level | $program_line - $message'
         Where optional parameters:
             $instance_name - name of logger instance;
@@ -302,8 +330,24 @@ class Logger(_Logger):
             $program_line - the line in which the message is called;
             $message - log message;
         """
+        return self._format
+
+    @format.setter
+    def format(self, format: str) -> None:
         self._format = format
         self._message_template = string.Template(f"{self._format}\n")
+    
+    @property
+    def style(self) -> Style:
+        """
+        An object of the style class, on the basis of which the log
+        messages are styled
+        """
+        return self._style
+
+    @style.setter
+    def style(self, style: Style) -> None:
+        self._style = style
 
     def enable(self, module: Optional[str] = None) -> None:
         self._change_module_status(module, True)
