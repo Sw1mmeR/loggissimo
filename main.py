@@ -11,7 +11,7 @@ from loggissimo.constants import Level
 
 
 def main():
-    logger.level = Level.INFO
+    logger.level = "INFO"
     print(logger)
     print(logger.level)
 
@@ -23,7 +23,7 @@ def main():
     logger.error("INFO")
     logger.critical("INFO")
 
-    logger.level = Level.DEBUG
+    logger.level = "DEBUG"
     print(logger.level)
     print()
 

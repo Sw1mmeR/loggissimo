@@ -34,13 +34,12 @@ class __LoggerMeta(type):
 class _Logger(metaclass=__LoggerMeta):
     _level = Level.INFO
     _modules: Dict[str, Tuple[bool, bool]] = {"__main__": (True, True)}
+    _cached_level: dict = {}
 
     def __new__(cls, *args, **kwargs) -> Self:
         return super().__new__(cls)
 
-    def __init__(
-        self, stream: IO = sys.stdout, level: Level = Level.INFO, *args, **kwargs
-    ) -> None:
+    def __init__(self, stream: IO = sys.stdout, *args, **kwargs) -> None:
         self._name_: str = kwargs.get("name", DEFAULT_LOGGER_NAME)
         self._tmp_path: str = kwargs.get("tmp_path", tempfile.gettempdir())
         self._lock = kwargs.get("lock", multiprocessing.Lock())
@@ -54,10 +53,8 @@ class _Logger(metaclass=__LoggerMeta):
         self._trace_file_path: str = kwargs.get("tracefile", None)
         self._trace_stream = self._open_tracefile()
         self._streams = [stream]
-        self.level = level
-        self._cache: dict = {}
-        self._proc_name = ""
         self.in_thread: bool = self._check_threading()
+        self._proc_name = ""
 
     def _open_tracefile(self):
         if self._trace_file_path:
@@ -127,11 +124,10 @@ class _Logger(metaclass=__LoggerMeta):
         Checking logging capability
         """
         try:
-            cached_level = self._cache[level]
+            cached_level = _Logger._cached_level[level]
         except KeyError:
-            self._cache[level] = self._valid_log_level(level)
-            cached_level = self._cache[level]
-
+            _Logger._cached_level[level] = self._valid_log_level(level)
+            cached_level = _Logger._cached_level[level]
         try:
             is_module, cached_module = _Logger._modules[module]
             return cached_level and cached_module
@@ -140,13 +136,14 @@ class _Logger(metaclass=__LoggerMeta):
             for mod in modules:
                 is_module, cached_module = _Logger._modules.get(mod, (False, None))
                 if cached_module is not None:
-                    return cached_module
+                    # print(f"module {mod}; {cached_module}", cached_level)
+                    return cached_module and cached_level
                 cached_module = _Logger._modules[mod] = (is_module, True)
-
+        # print(f"module {mod}; {cached_module}", cached_level)
         return cached_level and cached_module
 
     def _valid_log_level(self, level: Level):
-        return level >= self._level
+        return level >= _Logger._level
 
     @staticmethod
     def catch(func: Callable):
@@ -160,9 +157,14 @@ class _Logger(metaclass=__LoggerMeta):
 
     def _log(self, level: Level, message: str):
         def colorize():
+            name = (
+                f"[{self._name_:<12} ({self._proc_name})]"
+                if self._proc_name
+                else f"[{self._name_:<12}]"
+            )
+
             inst_name = _colorize(
-                f"[{self._name_:<12}{' (' if self._proc_name else ''}{f'{self._proc_name:<12}' if self._proc_name else ''}"
-                + f"{')' if self._proc_name else ''}]",
+                f"{name:<24}",
                 self._style.inst_name.text_color.value,
                 self._style.inst_name.font_style.value,
                 self._style.inst_name.background_color.value,
@@ -199,6 +201,7 @@ class _Logger(metaclass=__LoggerMeta):
                 message=_message,
             ).lstrip()
 
+        self.in_thread = self._check_threading()
         dt = datetime.now()
         time = time_now = dt.strftime("%Y-%m-%d %H:%M:%S")
         frame = sys._getframe(3)
@@ -263,6 +266,10 @@ class _Logger(metaclass=__LoggerMeta):
     def _change_module_status(
         self, module: Optional[str], action: bool, path: str = ""
     ):
+        if module in _Logger._modules.keys():
+            _Logger._modules[module] = (_Logger._modules[module][0], action)
+            return
+
         if module:
             _Logger._modules[module] = (path == "__init__.py", action)
             return
@@ -273,7 +280,7 @@ class _Logger(metaclass=__LoggerMeta):
         return
 
     def __repr__(self) -> str:
-        return f"<loggissimo.logger streams={self._streams}>"
+        return f"<loggissimo.logger level={Logger.level} streams={self._streams}>"
 
     def __del__(self) -> None:
         # Если были в потоках, то надо подчистить все за собой
@@ -300,23 +307,27 @@ class Logger(_Logger):
     ) -> None:
         super().__init__(
             open(file, "w") if file else sys.stdout,
-            level,
             *args,
             **kwargs,
         )
-        self.level = level
+
+        if isinstance(level, str):
+            level = Level[level]
+
+        if level < self.level:
+            self.level = level
 
     @property
     def level(self) -> Level:
-        return self._level
+        return _Logger._level
 
     @level.setter
     def level(self, level: Level | str) -> None:
-        if hasattr(self, "_cache"):
-            self._cache.clear()
+        if hasattr(self, "_cached_level"):
+            _Logger._cached_level.clear()
         if isinstance(level, str):
             level = Level[level]
-        self._level = level
+        _Logger._level = level
 
     @property
     def format(self) -> str:
