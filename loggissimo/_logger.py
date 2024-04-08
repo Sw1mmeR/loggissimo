@@ -61,7 +61,7 @@ class _Logger(metaclass=__LoggerMeta):
             try:
                 path = os.path.abspath(self._trace_file_path)
                 return open(path, "w")
-            
+
             except FileNotFoundError as ex:
                 print_trace(
                     traceback.format_tb(ex.__traceback__),
@@ -76,7 +76,7 @@ class _Logger(metaclass=__LoggerMeta):
                     f"Probably a read-only path {self._trace_file_path}",
                 )
         return None
-    
+
     def _check_threading(self) -> bool:
         """
         Determine whether the logger is in a thread
@@ -226,15 +226,15 @@ class _Logger(metaclass=__LoggerMeta):
             program_line=raw_frame_line,
             message=_message,
         ).lstrip()
-        
+
         # Если задан трейсфайл, то выдаем в него
         if self._trace_stream:
             self._write_msg_in_stream(self._trace_stream, msg, False, colorize)
-        
+
         # Если не проходим по условию, то выходим
-        if  not self._is_enabled(level, module):
+        if not self._is_enabled(level, module):
             return
-        
+
         if not self._streams:
             raise LoggissimoError(
                 "No streams found. It could have happened that you cleared the list of streams and then did not add a stream."
@@ -318,7 +318,7 @@ class Logger(_Logger):
             self.level = level
 
     @property
-    def level(self) -> Level:
+    def level(self) -> Level | str:
         return _Logger._level
 
     @level.setter
@@ -347,7 +347,7 @@ class Logger(_Logger):
     def format(self, format: str) -> None:
         self._format = format
         self._message_template = string.Template(f"{self._format}\n")
-    
+
     @property
     def style(self) -> Style:
         """

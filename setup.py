@@ -7,4 +7,7 @@ setup(
     author="Sw1mmeR & AfanasevAndrey",
     description="Awesome and simple logger",
     packages=find_packages(),
+    package_data={
+        loggissimo.__name__: ["py.typed"],
+    },
 )
