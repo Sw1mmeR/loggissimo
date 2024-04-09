@@ -22,8 +22,10 @@ from .constants import DEFAULT_LOGGER_NAME, Level
 
 class __LoggerMeta(type):
     _instances: WeakValueDictionary = WeakValueDictionary()
+    lock = multiprocessing.Lock()
 
     def __call__(cls, name: str = DEFAULT_LOGGER_NAME, *args, **kwargs):
+
         if name not in cls._instances.keys():
             instance = super().__call__(*args, name=name, **kwargs)
             cls._instances[name] = instance
@@ -42,7 +44,7 @@ class _Logger(metaclass=__LoggerMeta):
     def __init__(self, stream: IO = sys.stdout, *args, **kwargs) -> None:
         self._name_: str = kwargs.get("name", DEFAULT_LOGGER_NAME)
         self._tmp_path: str = kwargs.get("tmp_path", tempfile.gettempdir())
-        self._lock = kwargs.get("lock", multiprocessing.Lock())
+        self._lock = kwargs.get("lock", _Logger.lock)
         self._disable_threads: bool = kwargs.get("disable_threads", False)
         self._force_colorize: bool = kwargs.get("force_colorize", False)
         self._format: str = kwargs.get(
@@ -53,7 +55,10 @@ class _Logger(metaclass=__LoggerMeta):
         self._trace_file_path: str = kwargs.get("tracefile", None)
         self._trace_stream = self._open_tracefile()
         self._streams = [stream]
+
         self.in_thread: bool = self._check_threading()
+        self._open_tmp_stream()
+
         self._proc_name = ""
 
     def _open_tracefile(self):
@@ -91,16 +96,6 @@ class _Logger(metaclass=__LoggerMeta):
                 _threading = True
                 self._proc_name = threading.current_thread().name
 
-            if _threading and not self._disable_threads:
-                file_name = "".join(
-                    random.choice(string.ascii_lowercase) for i in range(16)
-                )
-                self._tmp_file_path = os.path.abspath(
-                    f"{self._tmp_path}"
-                    + f"{'' if self._tmp_path.endswith('/') else '/'}{file_name}"
-                )
-                self._tmp_out_stream: IO = open(self._tmp_file_path, "w+")
-
             return _threading
 
         except FileNotFoundError as ex:
@@ -118,6 +113,16 @@ class _Logger(metaclass=__LoggerMeta):
             )
 
         return False
+
+    def _open_tmp_stream(self) -> None:
+        if not self.in_thread or self._disable_threads:
+            return
+        file_name = "".join(random.choice(string.ascii_lowercase) for i in range(16))
+        self._tmp_file_path = os.path.abspath(
+            f"{self._tmp_path}"
+            + f"{'' if self._tmp_path.endswith('/') else '/'}{file_name}"
+        )
+        self._tmp_out_stream: IO = open(self._tmp_file_path, "w+")
 
     def _is_enabled(self, level: Level, module: str) -> bool:
         """
@@ -260,7 +265,6 @@ class _Logger(metaclass=__LoggerMeta):
         elif stream.name == "<stdout>":
             if not thread or self._disable_threads:
                 msg2stream = colorizer()
-
         stream.write(msg2stream)
 
     def _change_module_status(
@@ -406,7 +410,7 @@ class Logger(_Logger):
         self._log(Level.CRITICAL, message)
 
     @_Logger.catch
-    def add(self, stream: IO | str, cache_path: str) -> None:
+    def add(self, stream: IO | str) -> None:
         """
         Add stream to logger instance output.
 
