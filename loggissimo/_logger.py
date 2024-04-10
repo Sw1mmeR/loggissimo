@@ -1,3 +1,4 @@
+import multiprocessing.process
 import sys
 import traceback
 
@@ -12,20 +13,26 @@ import random
 import string
 import tempfile
 
-from .style import Style
-from ._utils import print_trace, get_module_combinations
-from ._colorizer import _colorize
-from .style import Color, FontStyle
-from .exceptions import LoggissimoError
-from .constants import DEFAULT_LOGGER_NAME, Level
+from style import Style
+from _utils import print_trace, get_module_combinations
+from _colorizer import _colorize
+from style import Color, FontStyle
+from exceptions import LoggissimoError
+from constants import DEFAULT_LOGGER_NAME, Level
 
 
 class __LoggerMeta(type):
     _instances: WeakValueDictionary = WeakValueDictionary()
     lock = multiprocessing.Lock()
+    trace_enabled = False
+    tracestream: dict = dict()
 
+    print('im 27')
     def __call__(cls, name: str = DEFAULT_LOGGER_NAME, *args, **kwargs):
-
+        if kwargs.get("trace_enabled", False):
+            print('im 30')
+            _Logger.trace_enabled = kwargs["trace_enabled"]
+        print(cls.trace_enabled)
         if name not in cls._instances.keys():
             instance = super().__call__(*args, name=name, **kwargs)
             cls._instances[name] = instance
@@ -52,8 +59,13 @@ class _Logger(metaclass=__LoggerMeta):
         )
         self._message_template = string.Template(f"{self._format}\n")
         self._style: Style = kwargs.get("style", Style())
-        self._trace_file_path: str = kwargs.get("tracefile", None)
+
+        print(_Logger.trace_enabled, '60')
+        self._trace_file_path: str = kwargs.get("tracefile", 
+            os.path.join(tempfile.gettempdir(),multiprocessing.current_process().name))
+        print(self._trace_file_path)
         self._trace_stream = self._open_tracefile()
+        print(self._trace_stream)
         self._streams = [stream]
 
         self.in_thread: bool = self._check_threading()
@@ -62,24 +74,29 @@ class _Logger(metaclass=__LoggerMeta):
         self._proc_name = ""
 
     def _open_tracefile(self):
-        if self._trace_file_path:
-            try:
-                path = os.path.abspath(self._trace_file_path)
-                return open(path, "w")
+        if _Logger.trace_enabled:
+            if not _Logger.tracestream.get(self._trace_file_path, None):
+                print('lalalal')
+                try:
+                    path = os.path.abspath(self._trace_file_path)
+                    _Logger.tracestream[self._trace_file_path] = open(path, "w+")
+                    print(list(_Logger._instances.keys()))
+                except FileNotFoundError as ex:
+                    print_trace(
+                        traceback.format_tb(ex.__traceback__),
+                        ex,
+                        "Specify the correct path for temporary files with the argument 'tracefile'",
+                    )
 
-            except FileNotFoundError as ex:
-                print_trace(
-                    traceback.format_tb(ex.__traceback__),
-                    ex,
-                    "Specify the correct path for temporary files with the argument 'tracefile'",
-                )
-
-            except PermissionError as ex:
-                print_trace(
-                    traceback.format_tb(ex.__traceback__),
-                    ex,
-                    f"Probably a read-only path {self._trace_file_path}",
-                )
+                except PermissionError as ex:
+                    print_trace(
+                        traceback.format_tb(ex.__traceback__),
+                        ex,
+                        f"Probably a read-only path {self._trace_file_path}",
+                    )
+            return _Logger.tracestream[self._trace_file_path]
+        else:
+            print(89)
         return None
 
     def _check_threading(self) -> bool:
@@ -216,8 +233,14 @@ class _Logger(metaclass=__LoggerMeta):
         except KeyError:
             module = None
 
+        print(_Logger.trace_enabled)
+        print(self._trace_stream)
+        if _Logger.trace_enabled and not self._trace_stream:
+            print(226)
+            self._trace_stream = self._open_tracefile()
         # Если не задан трейсфайл и не проходим условия выдачи, то выходим
         if not self._is_enabled(level, module) and not self._trace_stream:
+            print(227)
             return
 
         raw_frame_line = f"{module}:{frame.f_code.co_name}:{frame.f_lineno}"
@@ -234,6 +257,7 @@ class _Logger(metaclass=__LoggerMeta):
 
         # Если задан трейсфайл, то выдаем в него
         if self._trace_stream:
+            print(244)
             self._write_msg_in_stream(self._trace_stream, msg, False, colorize)
 
         # Если не проходим по условию, то выходим
@@ -446,3 +470,33 @@ class Logger(_Logger):
         Clear logger instance output streams list.
         """
         self._streams.clear()
+
+import multiprocessing
+import time
+def test(name):
+        log = Logger("test"+name, trace_enabled = True)
+        log2 = Logger("test2 - "+name)
+        log.trace('test start')
+        log2.trace('test start')
+        slp = random.randint(1, 10)
+        time.sleep(slp)
+        log.trace("test stop after "+str(slp))
+        log2.info("test2 stop after "+str(slp))
+if __name__ == "__main__":
+    
+    # log = Logger("test1")
+    # log2 = Logger("test2", trace_enabled = True)
+    # log.info("test")
+    # log2.info("test2")
+    # log.info("test3")
+    # log2.info("test4")
+    # log.info("test5")
+    # with open(log2._trace_file_path,'r') as f:
+    #     print(f.read()
+    #     )
+    
+
+    processes = [multiprocessing.Process(target=test, args=(str(i),), name = f"Process {i}") for i in range(5)]
+    [p.start() for p in processes]
+    
+    [p.join() for p in processes]
