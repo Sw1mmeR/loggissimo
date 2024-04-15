@@ -1,5 +1,6 @@
 #!/bin/python3
 from loggissimo import logger
+from loggissimo._logger import Logger
 from loggissimo.constants import Level
 
 # sys.path.append(
@@ -62,5 +63,36 @@ def main():
     logger.critical("ERROR")
 
 
+#if __name__ == "__main__":
+#   main()
+
+import multiprocessing
+import time
+import random
+def test(name):
+        log = Logger("test"+name, trace_enabled = True)
+        log2 = Logger("test2 - "+name)
+        log.trace('test start')
+        log2.trace('test start')
+        slp = random.randint(1, 10)
+        time.sleep(slp)
+        log.trace("test stop after "+str(slp))
+        log2.info("test2 stop after "+str(slp))
 if __name__ == "__main__":
-    main()
+    
+    # log = Logger("test1")
+    # log2 = Logger("test2", trace_enabled = True)
+    # log.info("test")
+    # log2.info("test2")
+    # log.info("test3")
+    # log2.info("test4")
+    # log.info("test5")
+    # with open(log2._trace_file_path,'r') as f:
+    #     print(f.read()
+    #     )
+    
+
+    processes = [multiprocessing.Process(target=test, args=(str(i),), name = f"Process {i}") for i in range(5)]
+    [p.start() for p in processes]
+    
+    [p.join() for p in processes]

@@ -13,21 +13,23 @@ import random
 import string
 import tempfile
 
-from style import Style
-from _utils import print_trace, get_module_combinations
-from _colorizer import _colorize
-from style import Color, FontStyle
-from exceptions import LoggissimoError
-from constants import DEFAULT_LOGGER_NAME, Level
+from .style import Style
+from ._utils import print_trace, get_module_combinations
+from ._colorizer import _colorize
+from .style import Color, FontStyle
+from .exceptions import LoggissimoError
+from .constants import DEFAULT_LOGGER_NAME, Level
 
 
 class __LoggerMeta(type):
     _instances: WeakValueDictionary = WeakValueDictionary()
     lock = multiprocessing.Lock()
     trace_enabled = False
+    # Кандидаты на оптимизацию
     tracestream: dict = dict()
+    threadstream: dict = dict()
 
-    print('im 27')
+    print('im 32')
     def __call__(cls, name: str = DEFAULT_LOGGER_NAME, *args, **kwargs):
         if kwargs.get("trace_enabled", False):
             print('im 30')
@@ -47,7 +49,7 @@ class _Logger(metaclass=__LoggerMeta):
 
     def __new__(cls, *args, **kwargs) -> Self:
         return super().__new__(cls)
-
+    # Оформить симпотично. Как мимнимум разделить на смысловые блоки и прокомментить
     def __init__(self, stream: IO = sys.stdout, *args, **kwargs) -> None:
         self._name_: str = kwargs.get("name", DEFAULT_LOGGER_NAME)
         self._tmp_path: str = kwargs.get("tmp_path", tempfile.gettempdir())
@@ -68,8 +70,9 @@ class _Logger(metaclass=__LoggerMeta):
         print(self._trace_stream)
         self._streams = [stream]
 
-        self.in_thread: bool = self._check_threading()
-        self._open_tmp_stream()
+        self.in_thread = self._check_threading
+        self._tmp_out_stream = None
+        
 
         self._proc_name = ""
 
@@ -103,43 +106,47 @@ class _Logger(metaclass=__LoggerMeta):
         """
         Determine whether the logger is in a thread
         """
-        try:
-            _threading = False
-            if multiprocessing.current_process().name != "MainProcess":
-                _threading = True
-                self._proc_name = multiprocessing.current_process().name
+        _threading = False
+        if multiprocessing.current_process().name != "MainProcess" and\
+            not self._disable_threads:
+            _threading = True
+            self._proc_name = multiprocessing.current_process().name
 
-            if threading.current_thread().name != "MainThread":
-                _threading = True
-                self._proc_name = threading.current_thread().name
+        if threading.current_thread().name != "MainThread" and\
+            not self._disable_threads:
+            _threading = True
+            self._proc_name = threading.current_thread().name
 
-            return _threading
+        return _threading
 
-        except FileNotFoundError as ex:
-            print_trace(
-                traceback.format_tb(ex.__traceback__),
-                ex,
-                "Specify the correct path for temporary files with the argument 'tmp_path'",
-            )
-
-        except PermissionError as ex:
-            print_trace(
-                traceback.format_tb(ex.__traceback__),
-                ex,
-                f"Probably a read-only path {self._tmp_path}",
-            )
-
-        return False
-
-    def _open_tmp_stream(self) -> None:
-        if not self.in_thread or self._disable_threads:
-            return
-        file_name = "".join(random.choice(string.ascii_lowercase) for i in range(16))
+    # Нужно объединить в один метод с трейсом и прочей шушерой файловой
+    def _open_tmp_stream(self) -> IO:
+        file_name = f"tmp_{self._proc_name.replace(' ', '_')}"
         self._tmp_file_path = os.path.abspath(
             f"{self._tmp_path}"
             + f"{'' if self._tmp_path.endswith('/') else '/'}{file_name}"
         )
-        self._tmp_out_stream: IO = open(self._tmp_file_path, "w+")
+        print(f"!!!!!!!!!!!!!!!!!{self._tmp_file_path}")
+        if not _Logger.threadstream.get(self._tmp_file_path, None):
+                print('lololoolo')
+                try:
+                    _Logger.threadstream[self._tmp_file_path] = open(self._tmp_file_path, "w+")
+                    print(f"!!!!!!!!!!!!!!!!!!!!!!!!!!{_Logger.threadstream[self._tmp_file_path]}")
+                except FileNotFoundError as ex:
+                    print_trace(
+                        traceback.format_tb(ex.__traceback__),
+                        ex,
+                        "Specify the correct path for temporary files with the argument 'tmp_path'",
+                    )
+
+                except PermissionError as ex:
+                    print_trace(
+                        traceback.format_tb(ex.__traceback__),
+                        ex,
+                        f"Probably a read-only path {self._tmp_path}",
+                    )    
+        
+        return _Logger.threadstream[self._tmp_file_path]
 
     def _is_enabled(self, level: Level, module: str) -> bool:
         """
@@ -270,6 +277,10 @@ class _Logger(metaclass=__LoggerMeta):
             )
         # Если в потоке, то не пишем в наши стримы
         if self.in_thread and not self._disable_threads:
+            if not self._tmp_out_stream:
+                print('!!!!!!!!!!!!!!!!!!!!279 ')
+                self._tmp_out_stream = self._open_tmp_stream()
+                print(f"TMP FILE STREAM {self._tmp_out_stream}")
             self._write_msg_in_stream(self._tmp_out_stream, msg, True, colorize)
         else:
             for stream in self._streams:
@@ -313,14 +324,15 @@ class _Logger(metaclass=__LoggerMeta):
     def __del__(self) -> None:
         # Если были в потоках, то надо подчистить все за собой
         if self.in_thread and not self._disable_threads:
+            print("327", self._tmp_out_stream)
             self._tmp_out_stream.seek(0)
             self._lock.acquire()
             for line in self._tmp_out_stream:
                 for stream in self._streams:
                     self._write_msg_in_stream(stream, line, False, None, True)
 
-            self._tmp_out_stream.close()
-            os.remove(self._tmp_file_path)
+            #self._tmp_out_stream.close()
+            #os.remove(self._tmp_file_path)
             self._lock.release()
         if not self.in_thread:
             for stream in self._streams:
