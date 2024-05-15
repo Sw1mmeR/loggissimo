@@ -53,34 +53,11 @@ class _Logger(metaclass=__LoggerMeta):
         self._message_template = string.Template(f"{self._format}\n")
         self._style: Style = kwargs.get("style", Style())
         self._trace_file_path: str = kwargs.get("tracefile", None)
-        self._trace_stream = self._open_tracefile()
         self._streams = [stream]
 
         self.in_thread: bool = self._check_threading()
-        self._open_tmp_stream()
 
         self._proc_name = ""
-
-    def _open_tracefile(self):
-        if self._trace_file_path:
-            try:
-                path = os.path.abspath(self._trace_file_path)
-                return open(path, "w")
-
-            except FileNotFoundError as ex:
-                print_trace(
-                    traceback.format_tb(ex.__traceback__),
-                    ex,
-                    "Specify the correct path for temporary files with the argument 'tracefile'",
-                )
-
-            except PermissionError as ex:
-                print_trace(
-                    traceback.format_tb(ex.__traceback__),
-                    ex,
-                    f"Probably a read-only path {self._trace_file_path}",
-                )
-        return None
 
     def _check_threading(self) -> bool:
         """
@@ -113,16 +90,6 @@ class _Logger(metaclass=__LoggerMeta):
             )
 
         return False
-
-    def _open_tmp_stream(self) -> None:
-        if not self.in_thread or self._disable_threads:
-            return
-        file_name = "".join(random.choice(string.ascii_lowercase) for i in range(16))
-        self._tmp_file_path = os.path.abspath(
-            f"{self._tmp_path}"
-            + f"{'' if self._tmp_path.endswith('/') else '/'}{file_name}"
-        )
-        self._tmp_out_stream: IO = open(self._tmp_file_path, "w+")
 
     def _is_enabled(self, level: Level, module: str) -> bool:
         """
@@ -217,7 +184,7 @@ class _Logger(metaclass=__LoggerMeta):
             module = None
 
         # Если не задан трейсфайл и не проходим условия выдачи, то выходим
-        if not self._is_enabled(level, module) and not self._trace_stream:
+        if not self._is_enabled(level, module):
             return
 
         raw_frame_line = f"{module}:{frame.f_code.co_name}:{frame.f_lineno}"
@@ -232,10 +199,6 @@ class _Logger(metaclass=__LoggerMeta):
             message=_message,
         ).lstrip()
 
-        # Если задан трейсфайл, то выдаем в него
-        if self._trace_stream:
-            self._write_msg_in_stream(self._trace_stream, msg, False, colorize)
-
         # Если не проходим по условию, то выходим
         if not self._is_enabled(level, module):
             return
@@ -245,11 +208,8 @@ class _Logger(metaclass=__LoggerMeta):
                 "No streams found. It could have happened that you cleared the list of streams and then did not add a stream."
             )
         # Если в потоке, то не пишем в наши стримы
-        if self.in_thread and not self._disable_threads:
-            self._write_msg_in_stream(self._tmp_out_stream, msg, True, colorize)
-        else:
-            for stream in self._streams:
-                self._write_msg_in_stream(stream, msg, self._force_colorize, colorize)
+        for stream in self._streams:
+            self._write_msg_in_stream(stream, msg, self._force_colorize, colorize)
 
     def _write_msg_in_stream(
         self,
@@ -287,21 +247,10 @@ class _Logger(metaclass=__LoggerMeta):
         return f"<loggissimo.logger level={Logger.level} streams={self._streams}>"
 
     def __del__(self) -> None:
-        # Если были в потоках, то надо подчистить все за собой
-        if self.in_thread and not self._disable_threads:
-            self._tmp_out_stream.seek(0)
-            self._lock.acquire()
-            for line in self._tmp_out_stream:
-                for stream in self._streams:
-                    self._write_msg_in_stream(stream, line, False, None, True)
-
-            self._tmp_out_stream.close()
-            os.remove(self._tmp_file_path)
-            self._lock.release()
-        if not self.in_thread:
-            for stream in self._streams:
-                if stream.name != "<stdout>":
-                    stream.close()
+        # if not self.in_thread:
+        for stream in self._streams:
+            if stream.name != "<stdout>":
+                stream.close()
 
 
 class Logger(_Logger):
@@ -318,7 +267,7 @@ class Logger(_Logger):
         if isinstance(level, str):
             level = Level[level]
 
-        if level < self.level:
+        if level < self.level:  # type: ignore
             self.level = level
 
     @property
