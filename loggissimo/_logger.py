@@ -45,7 +45,6 @@ class _Logger(metaclass=__LoggerMeta):
         self._name_: str = kwargs.get("name", DEFAULT_LOGGER_NAME)
         self._tmp_path: str = kwargs.get("tmp_path", tempfile.gettempdir())
         self._lock = kwargs.get("lock", _Logger.lock)
-        self._disable_threads: bool = kwargs.get("disable_threads", False)
         self._force_colorize: bool = kwargs.get("force_colorize", False)
         self._format: str = kwargs.get(
             "format", "$instance_name $time | $level | $program_line - $message"
@@ -53,11 +52,10 @@ class _Logger(metaclass=__LoggerMeta):
         self._message_template = string.Template(f"{self._format}\n")
         self._style: Style = kwargs.get("style", Style())
         self._trace_file_path: str = kwargs.get("tracefile", None)
-        self._streams = [stream]
-
-        self.in_thread: bool = self._check_threading()
+        self._streams = {stream.name: stream}
 
         self._proc_name = ""
+        self.in_thread: bool = self._check_threading()
 
     def _check_threading(self) -> bool:
         """
@@ -77,14 +75,12 @@ class _Logger(metaclass=__LoggerMeta):
 
         except FileNotFoundError as ex:
             print_trace(
-                traceback.format_tb(ex.__traceback__),
                 ex,
                 "Specify the correct path for temporary files with the argument 'tmp_path'",
             )
 
         except PermissionError as ex:
             print_trace(
-                traceback.format_tb(ex.__traceback__),
                 ex,
                 f"Probably a read-only path {self._tmp_path}",
             )
@@ -123,36 +119,33 @@ class _Logger(metaclass=__LoggerMeta):
             try:
                 return func(*args, **kwargs)
             except Exception as ex:
-                print_trace(traceback.format_tb(ex.__traceback__), ex)
+                print_trace(ex)
 
         return _decorator
 
     def _log(self, level: Level, message: str):
         def colorize():
-            name = (
-                f"[{self._name_:<12} ({self._proc_name})]"
-                if self._proc_name
-                else f"[{self._name_:<12}]"
-            )
-
             inst_name = _colorize(
-                f"{name:<24}",
+                f"{name:12}",
                 self._style.inst_name.text_color.value,
                 self._style.inst_name.font_style.value,
                 self._style.inst_name.background_color.value,
             )
+
             time = _colorize(
                 f"{time_now:10}",
                 self._style.time.text_color.value,
                 self._style.time.font_style.value,
                 self._style.time.background_color.value,
             )
+
             levelname = _colorize(
                 f"{str(level):<8}",
                 self._style.level[level].text_color.value,
                 self._style.levelname_fstyle.value,
                 self._style.level[level].background_color.value,
             )
+
             frame_line = _colorize(
                 raw_frame_line,
                 self._style.frame.text_color.value,
@@ -188,11 +181,16 @@ class _Logger(metaclass=__LoggerMeta):
             return
 
         raw_frame_line = f"{module}:{frame.f_code.co_name}:{frame.f_lineno}"
-        inst_name = f"[{self._name_:<10}]"
+        name = (
+            f"{self._name_ + f' ({self._proc_name})':20}@"
+            if self._proc_name
+            else f"{self._name_:12}@"
+        )
+        # inst_name = f"[{self._name_:<10}]"
         levelname = str(level)
         _message = message
         msg = self._message_template.safe_substitute(
-            instance_name=f"{inst_name if self._name_ != DEFAULT_LOGGER_NAME else ''}",
+            instance_name=f"{name if self._name_ != DEFAULT_LOGGER_NAME else ''}",
             time=time,
             level=levelname,
             program_line=raw_frame_line,
@@ -207,8 +205,7 @@ class _Logger(metaclass=__LoggerMeta):
             raise LoggissimoError(
                 "No streams found. It could have happened that you cleared the list of streams and then did not add a stream."
             )
-        # Если в потоке, то не пишем в наши стримы
-        for stream in self._streams:
+        for stream in self._streams.values():
             self._write_msg_in_stream(stream, msg, self._force_colorize, colorize)
 
     def _write_msg_in_stream(
@@ -217,14 +214,11 @@ class _Logger(metaclass=__LoggerMeta):
         msg: str,
         force_colorize: bool,
         colorizer,
-        thread: bool = False,
     ) -> None:
         msg2stream = msg
-        if force_colorize:
+        if force_colorize or stream.name == "<stdout>":
             msg2stream = colorizer()
-        elif stream.name == "<stdout>":
-            if not thread or self._disable_threads:
-                msg2stream = colorizer()
+
         stream.write(msg2stream)
 
     def _change_module_status(
@@ -247,8 +241,7 @@ class _Logger(metaclass=__LoggerMeta):
         return f"<loggissimo.logger level={Logger.level} streams={self._streams}>"
 
     def __del__(self) -> None:
-        # if not self.in_thread:
-        for stream in self._streams:
+        for stream in self._streams.values():
             if stream.name != "<stdout>":
                 stream.close()
 
@@ -369,11 +362,11 @@ class Logger(_Logger):
             cache_path (str): path for creation temporary files
         """
         if isinstance(stream, str):
-            stream = open(stream, "a")
-        self._streams.append(stream)
+            stream = open(stream, "w+", buffering=1)
+        self._streams[stream.name] = stream
 
     @_Logger.catch
-    def remove(self, id: int) -> None:
+    def remove(self, name: str) -> None:
         """
         Remove output stream from logger instance output streams.
 
@@ -385,9 +378,7 @@ class Logger(_Logger):
         ------
             LoggissimoError: Stream not found
         """
-        if len(self._streams) < id:
-            raise LoggissimoError("Stream not found")
-        del self._streams[id]
+        del self._streams[name]
 
     @_Logger.catch
     def clear(self) -> None:

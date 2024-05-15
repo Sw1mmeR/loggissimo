@@ -1,14 +1,13 @@
 import math
 import shutil
 
+import traceback
 from typing import List
 
 from .constants import END_LOGGER_TRACE, START_LOGGER_TRACE
 
 
-def print_trace(
-    traces: List[str], ex: Exception, advice: str = "", line_char: str = "="
-) -> None:
+def print_trace(ex: Exception, advice: str = "", line_char: str = "=") -> None:
     columns = shutil.get_terminal_size().columns
 
     half_start_columns = math.ceil((columns - len(START_LOGGER_TRACE)) / 2)
@@ -32,6 +31,7 @@ def print_trace(
             break
 
     print(start_trace_line.center(columns), end="\n\n")
+    traces = traceback.format_tb(ex.__traceback__)
     [print(trace) for trace in traces]
     print(ex)
     print(advice)
