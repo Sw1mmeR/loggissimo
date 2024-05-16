@@ -1,23 +1,20 @@
 import sys
-import traceback
+
+import string
+import inspect
+import tempfile
+import threading
+import multiprocessing
 
 from datetime import datetime
-from typing import IO, Callable, Dict, List, Optional, Self, Tuple, overload
 from weakref import WeakValueDictionary
-import multiprocessing
-import threading
-import inspect
-import os
-import random
-import string
-import tempfile
+from typing import IO, Callable, Dict, List, Optional, Self, Tuple
 
 from .style import Style
-from ._utils import print_trace, get_module_combinations
 from ._colorizer import _colorize
-from .style import Color, FontStyle
 from .exceptions import LoggissimoError
 from .constants import DEFAULT_LOGGER_NAME, Level
+from ._utils import print_trace, get_module_combinations
 
 
 class __LoggerMeta(type):
@@ -37,6 +34,7 @@ class _Logger(metaclass=__LoggerMeta):
     _level = Level.INFO
     _modules: Dict[str, Tuple[bool, bool]] = {"__main__": (True, True)}
     _cached_level: dict = {}
+    _aggregated_streams: Dict[str, IO] = dict()
 
     def __new__(cls, *args, **kwargs) -> Self:
         return super().__new__(cls)
@@ -53,7 +51,6 @@ class _Logger(metaclass=__LoggerMeta):
         self._style: Style = kwargs.get("style", Style())
         self._trace_file_path: str = kwargs.get("tracefile", None)
         self._streams = {stream.name: stream}
-
         self._proc_name = ""
         self.in_thread: bool = self._check_threading()
 
@@ -257,6 +254,9 @@ class Logger(_Logger):
             **kwargs,
         )
 
+        for stream in _Logger._aggregated_streams.values():
+            self.add(stream)
+
         if isinstance(level, str):
             level = Level[level]
 
@@ -351,6 +351,28 @@ class Logger(_Logger):
     def critical(self, message: str = "") -> None:
         self._log(Level.CRITICAL, message)
 
+    @classmethod
+    @_Logger.catch
+    def addall(cls, stream: IO | str) -> None:
+        """
+        Add stream to ALL logger instances.
+
+        Args
+        ----
+            stream (IO | str): IO object or filename.
+        """
+        if isinstance(stream, str):
+            try:
+                cls._aggregated_streams[stream]
+                return
+            except KeyError:
+                stream = open(stream, "w+", buffering=1)
+
+        cls._aggregated_streams[stream.name] = stream
+
+        for instance in cls._instances.values():
+            instance._streams[stream.name] = stream
+
     @_Logger.catch
     def add(self, stream: IO | str) -> None:
         """
@@ -359,9 +381,10 @@ class Logger(_Logger):
         Args
         ----
             stream (IO | str): IO object or filename.
-            cache_path (str): path for creation temporary files
         """
         if isinstance(stream, str):
+            if not self._streams.get(stream, False):
+                return
             stream = open(stream, "w+", buffering=1)
         self._streams[stream.name] = stream
 
