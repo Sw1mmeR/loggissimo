@@ -1,5 +1,6 @@
 #!/bin/python3
-from loggissimo import logger
+from multiprocessing import Process
+from loggissimo import logger, Logger
 from loggissimo.constants import Level
 
 # sys.path.append(
@@ -10,56 +11,49 @@ from loggissimo.constants import Level
 # logger.level = Level.DEBUG
 
 
+def logs():
+    logger.info("1")
+    logger.debug("2")
+    logger.critical("3")
+
+
 def main():
-    logger.level = "INFO"
-    print(logger)
-    print(logger.level)
-
-    logger.info("INFO")
-    logger.debug("INFO")
-    logger.trace("INFO")
-    logger.success("INFO")
-    logger.warning("INFO")
-    logger.error("INFO")
-    logger.critical("INFO")
-
+    Logger.addall("test.log")
     logger.level = "DEBUG"
-    print(logger.level)
-    print()
+    proc = Process(target=logs, name="Access Point 212")
+    proc.start()
+    proc.join()
+    logger.info("test1")
+    logger.destructor("test")
+    # log1 = Logger("my_logger")
 
-    logger.info("DEBUG")
-    logger.debug("DEBUG")
-    logger.trace("DEBUG")
-    logger.success("DEBUG")
-    logger.warning("DEBUG")
-    logger.error("DEBUG")
-    logger.critical("DEBUG")
+    # log2 = Logger("my_logger2")
 
-    logger.disable()
-    logger.level = Level.TRACE
-    print(logger.level)
-    print()
+    # # logger.add("my_test.log")
+    # log1.info("test")
+    # logger.debug("test2")
+    # log2.critical("Test")
 
-    logger.info("TRACE")
-    logger.debug("TRACE")
-    logger.trace("TRACE")
-    logger.success("TRACE")
-    logger.warning("TRACE")
-    logger.error("TRACE")
-    logger.critical("TRACE")
+    # for st in logger._streams.values():
+    #     print(st.closed)
 
-    logger.level = Level.ERROR
-    print(logger.level)
-    print()
-    logger.enable()
+    # del log1
 
-    logger.info("ERROR")
-    logger.debug("ERROR")
-    logger.trace("ERROR")
-    logger.success("ERROR")
-    logger.warning("ERROR")
-    logger.error("ERROR")
-    logger.critical("ERROR")
+    # log1 = Logger("my_logger")
+    # print()
+    # print(Logger._aggregated_streams["test.log"].closed)
+    # for st in logger._streams.values():
+    #     print(st.closed)
+
+    # log1.info("end")
+    # log1.info("end")
+    # log1.info("end")
+    # log1.info("end")
+
+    # del log1
+
+    # log1 = Logger("test1")
+    # log1.info("!!!!!!!!!!!")
 
 
 if __name__ == "__main__":

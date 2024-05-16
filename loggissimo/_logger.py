@@ -137,7 +137,11 @@ class _Logger(metaclass=__LoggerMeta):
             )
 
             time = _colorize(
-                f"{time_now:19}",
+                (
+                    f"{'.'*8}"
+                    if level == Level.DELETE
+                    else f"{time_now.strftime('%H:%M:%S'):8}"
+                ),
                 self._style.time.text_color.value,
                 self._style.time.font_style.value,
                 self._style.time.background_color.value,
@@ -151,7 +155,7 @@ class _Logger(metaclass=__LoggerMeta):
             )
 
             frame_line = _colorize(
-                f"{raw_frame_line:52}",
+                f"{raw_frame_line:32}",
                 self._style.frame.text_color.value,
                 self._style.frame.font_style.value,
                 self._style.frame.background_color.value,
@@ -171,11 +175,12 @@ class _Logger(metaclass=__LoggerMeta):
             ).lstrip()
 
         self.in_thread = self._check_threading()
-        time_now = (
-            ""
-            if level == Level.DELETE
-            else datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        )
+        time_now = datetime.now()
+        # (
+        #   ""
+        #  if level == Level.DELETE
+        # else   # .strftime("%Y-%m-%d %H:%M:%S")
+        # )
         frame = sys._getframe(3)
 
         try:
@@ -198,7 +203,11 @@ class _Logger(metaclass=__LoggerMeta):
         _message = message
         msg = self._message_template.safe_substitute(
             instance_name=f"{name if self._name_ != DEFAULT_LOGGER_NAME else ''}".format(),
-            time=f"{time_now:19}",
+            time=(
+                f"{'.'*19}"
+                if level == Level.DELETE
+                else f"{time_now.strftime('%Y-%m-%d %H:%M:%S'):19}"
+            ),
             level=f"{levelname:<8}",
             program_line=f"{raw_frame_line:52}",
             message=_message,
