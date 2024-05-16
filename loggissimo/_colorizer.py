@@ -1,4 +1,6 @@
+from datetime import datetime
 from enum import Enum
+from string import Template
 from typing import Optional
 
 
@@ -53,24 +55,32 @@ def _colorize(
     Return:
         str - colorized and styled text
     """
-    # Определяем коды
-    _color = color
-    _style = style
+    back: int | str = ""
     if str(background.value):
-        _back = int(str(background.value)) + 10
-    else:
-        _back = ""
+        back = int(background.value) + 10
 
-    # cобираем открывающий код
     code = ""
-    if _color != _style != _back:
-        first = ""
-        second = ""
-        if _color and _style or _style and _back:
-            first = ";"
-        if _color and _back:
-            second = ";"
-        code = f"\u001b[{_style}{first}{_color}{second}{_back}m"
+    if color != style != back:
+        code = f"\u001b[{style}{';' if color and style or style and back else ''}{color}{';' if color and back else ''}{back}m"
 
     ender = "\u001b[0m"
     return f"{code}{text}{ender}"
+
+
+def colorize(
+    name: str,
+    time: str | datetime,
+    levelname: str,
+    frame_line: str,
+    message: str,
+    template: Template,
+) -> str:
+    name = _colorize(
+        f"{name:24}",
+        self._style.inst_name.text_color.value,
+        self._style.inst_name.font_style.value,
+        self._style.inst_name.background_color.value,
+    )
+    return template.safe_substitute(
+        name=name, time=time, level=levelname, frame=frame_line, message=message
+    )

@@ -204,7 +204,7 @@ class _Logger(metaclass=__LoggerMeta):
         msg = self._message_template.safe_substitute(
             instance_name=f"{name if self._name_ != DEFAULT_LOGGER_NAME else ''}".format(),
             time=(
-                f"{'.'*19}"
+                f"{'.' * 19}"
                 if level == Level.DELETE
                 else f"{time_now.strftime('%Y-%m-%d %H:%M:%S'):19}"
             ),
