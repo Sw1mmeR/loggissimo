@@ -29,6 +29,13 @@ class __LoggerMeta(type):
             return instance
         return cls._instances[name]
 
+    def __del__(self):
+        for instance in self._instances.values():
+            for stream in instance._streams.values():
+                if stream.name == "<stdout>":
+                    continue
+            stream.close()
+
 
 class _Logger(metaclass=__LoggerMeta):
     _level = Level.INFO
@@ -45,7 +52,7 @@ class _Logger(metaclass=__LoggerMeta):
         self._lock = kwargs.get("lock", _Logger.lock)
         self._force_colorize: bool = kwargs.get("force_colorize", False)
         self._format: str = kwargs.get(
-            "format", "$instance_name $time | $level | $program_line - $message"
+            "format", "$instance_name @ $time | $level | $program_line :$message"
         )
         self._message_template = string.Template(f"{self._format}\n")
         self._style: Style = kwargs.get("style", Style())
@@ -123,14 +130,14 @@ class _Logger(metaclass=__LoggerMeta):
     def _log(self, level: Level, message: str):
         def colorize():
             inst_name = _colorize(
-                f"{name:12}",
+                f"{name:24}",
                 self._style.inst_name.text_color.value,
                 self._style.inst_name.font_style.value,
                 self._style.inst_name.background_color.value,
             )
 
             time = _colorize(
-                f"{time_now:10}",
+                f"{time_now:19}",
                 self._style.time.text_color.value,
                 self._style.time.font_style.value,
                 self._style.time.background_color.value,
@@ -144,7 +151,7 @@ class _Logger(metaclass=__LoggerMeta):
             )
 
             frame_line = _colorize(
-                raw_frame_line,
+                f"{raw_frame_line:52}",
                 self._style.frame.text_color.value,
                 self._style.frame.font_style.value,
                 self._style.frame.background_color.value,
@@ -164,8 +171,11 @@ class _Logger(metaclass=__LoggerMeta):
             ).lstrip()
 
         self.in_thread = self._check_threading()
-        dt = datetime.now()
-        time = time_now = dt.strftime("%Y-%m-%d %H:%M:%S")
+        time_now = (
+            ""
+            if level == Level.DELETE
+            else datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        )
         frame = sys._getframe(3)
 
         try:
@@ -179,18 +189,18 @@ class _Logger(metaclass=__LoggerMeta):
 
         raw_frame_line = f"{module}:{frame.f_code.co_name}:{frame.f_lineno}"
         name = (
-            f"{self._name_ + f' ({self._proc_name})':20}@"
+            f"{self._name_ + f' ({self._proc_name})':24}"
             if self._proc_name
-            else f"{self._name_:12}@"
+            else f"{self._name_:12}"
         )
-        # inst_name = f"[{self._name_:<10}]"
+
         levelname = str(level)
         _message = message
         msg = self._message_template.safe_substitute(
-            instance_name=f"{name if self._name_ != DEFAULT_LOGGER_NAME else ''}",
-            time=time,
-            level=levelname,
-            program_line=raw_frame_line,
+            instance_name=f"{name if self._name_ != DEFAULT_LOGGER_NAME else ''}".format(),
+            time=f"{time_now:19}",
+            level=f"{levelname:<8}",
+            program_line=f"{raw_frame_line:52}",
             message=_message,
         ).lstrip()
 
@@ -239,8 +249,14 @@ class _Logger(metaclass=__LoggerMeta):
 
     def __del__(self) -> None:
         for stream in self._streams.values():
-            if stream.name != "<stdout>":
-                stream.close()
+            try:
+                _Logger._aggregated_streams[stream.name]
+                continue
+            except KeyError:
+                pass
+            if stream.name == "<stdout>":
+                continue
+            stream.close()
 
 
 class Logger(_Logger):
@@ -351,6 +367,10 @@ class Logger(_Logger):
     def critical(self, message: str = "") -> None:
         self._log(Level.CRITICAL, message)
 
+    @_Logger.catch
+    def destructor(self, message: str = "") -> None:
+        self._log(Level.DELETE, message)
+
     @classmethod
     @_Logger.catch
     def addall(cls, stream: IO | str) -> None:
@@ -363,7 +383,7 @@ class Logger(_Logger):
         """
         if isinstance(stream, str):
             try:
-                cls._aggregated_streams[stream]
+                _Logger._aggregated_streams[stream]
                 return
             except KeyError:
                 stream = open(stream, "w+", buffering=1)

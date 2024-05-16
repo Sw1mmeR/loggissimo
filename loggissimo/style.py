@@ -107,9 +107,14 @@ class Style:
         self.level[Level.ERROR] = style(*_error_style)
 
         _crit_style = level_style.get(
-            Level.CRITICAL, (Color.MAGENTA, FontStyle.BOLD, Color.RED)
+            Level.CRITICAL, (Color.WHITE, FontStyle.BOLD, Color.RED)
         )
         self.level[Level.CRITICAL] = style(*_crit_style)
+
+        _del_style = level_style.get(
+            Level.DELETE, (Color.MAGENTA, FontStyle.BOLD, Color.DEFAULT)
+        )
+        self.level[Level.DELETE] = style(*_del_style)
 
         # style for level name
         self.levelname_fstyle = levelname_fontstyle.value
