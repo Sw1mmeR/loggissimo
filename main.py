@@ -1,11 +1,18 @@
 #!/bin/python3
 from enum import Enum, IntEnum
 from multiprocessing import Process
-from loggissimo import logger, Logger
-from loggissimo.constants import Level
-from loggissimo._colorizer import _colorize, _Colors, _FontStyle
+import os
+import re
+import sys
+from typing import Any, Dict, List
+# from loggissimo import logger, Logger
+# from loggissimo.constants import Level
 
-from multipledispatch import dispatch  # type: ignore
+from multipledispatch import dispatch
+
+from loggissimo.colorizer.colorizer import Style, rgb
+
+# from loggissimo import Color, Colorizer, Style  # type: ignore
 
 # sys.path.append(
 #     os.path.abspath(os.path.join(os.path.dirname(__file__), os.path.pardir))
@@ -14,74 +21,75 @@ from multipledispatch import dispatch  # type: ignore
 
 # logger.level = Level.DEBUG
 
-
-def logs():
-    logger.info("1")
-    logger.debug("2")
-    logger.critical("3")
+from loggissimo.colorizer import red, black, blue, Color
 
 
-# "<background=green><font=red>test</font></background>"
-# def parse_tags(tag):
-#     tag_name = tag[1 : tag.find("=")]
-#     tag_value = tag[tag.find("=") + 1 : tag.find(">")]
-#     tag_text = tag[tag.find(">") + 1 : -7]
-#     return tag_name, tag_value, tag_text
+class Tag:
+    def __init__(self, name: str, value: str, text: str = "") -> None:
+        self.name = name
+        self.value = value
+        self._closed = False
+        self.text = text
 
+    @property
+    def closed(self) -> bool:
+        return self._closed
+    
+    @closed.setter
+    def closed(self, value: bool) -> None:
+        self._closed = value
 
-# def parse_tags(text):
-#     tags = []
-#     start_tag = "<"
-#     end_tag = ">"
-
-#     current_index = 0
-#     while current_index < len(text):
-#         tag = {}
-
-#         open_tag_start = text.find(start_tag, current_index)
-#         if open_tag_start == -1:
-#             break
-
-#         open_tag_end = text.find(end_tag, open_tag_start)
-#         tag_name_value = text[open_tag_start + 1 : open_tag_end].split("=")
-
-#         tag["tag_name"] = tag_name_value[0]
-#         tag["value"] = tag_name_value[1].strip('"')
-
-#         close_tag_start = text.find(start_tag + "/" + tag["tag_name"], open_tag_end)
-#         if close_tag_start == -1:
-#             break
-
-#         tag["text"] = text[open_tag_end + 1 : close_tag_start]
-
-#         tags.append(tag)
-#         current_index = close_tag_start + len(tag["tag_name"]) + 3
-
-#     return tags
-
+    def __repr__(self) -> str:
+        return str({'name': self.name, 'value': self.value, 'text': self.text, 'closed': self.closed})
+    
+    def __str__(self) -> str:
+        return f"{self.name}={self.value}"
 
 def parse_tags(tag):
-    tag_name = tag[1 : tag.find("=")]
-    tag_value = tag[tag.find("=") + 1 : tag.find(">")]
-    tag_text = tag[tag.find(">") + 1 : -len(tag_name) - 3]
+    tag_name = tag[1:tag.find('=')]
+    tag_value = tag[tag.find('=')+1:tag.find('>')]
+    tag_text = tag[tag.find('>')+1:-len(tag_name)-3]
     return tag_name, tag_value, tag_text
-
 
 def parse_nested_tags(text):
     stack = []
     result = []
     current_tag = ""
     for char in text:
-        if char == "<":
+        if char == '<':
             if current_tag:
                 stack.append(current_tag)
-            current_tag = "<"
-        elif char == ">":
-            current_tag += ">"
-            stack.append(current_tag)
+            current_tag = char
+        elif char == '>':
+            current_tag += char
+            if current_tag.startswith("</"):
+                print("curr", current_tag[2:-1])
+                print("stack", stack)
+                closing_tag = current_tag[2:-1]
+                while stack and not stack[-1].endswith(closing_tag):
+                    result.append((result[-1][0], result[-1][1], result[-1][2] + stack.pop()))
+                    # stack.pop()
+                    print("res", result)
+                if stack and stack[-1].endswith(closing_tag):
+                    if result:
+                        result[-1] = (result[-1][0], result[-1][1], result[-1][2] + stack.pop())
+                    else:
+                        stack.pop()
+                    if not stack:
+                        break
+                else:
+                    pass
+                    # print("Missing closing tag: </{}>".format(closing_tag))
+                    # raise Exception("Missing closing tag: </{}>".format(closing_tag))
+            else:
+                stack.append(current_tag)
             current_tag = ""
         else:
             current_tag += char
+        # print(stack)
+
+    if len(stack) > 0:
+        raise Exception("Unclosed tags: {}".format(stack))
 
     for tag in stack:
         if tag.startswith("<"):
@@ -91,49 +99,69 @@ def parse_nested_tags(text):
 
     return result
 
+# def parse_tag_value(tags: Dict[str, Tag], tag_str, closing, inner_text):
+#     tag = tag_str.strip(">/<")
+#     if closing:
+#         current_tag = tags.get(tag, None)
+#         if not current_tag:
+#             raise KeyError(f"No openning tag for {tag}")
+#         tags[tag].closed = True
+#         return
+#     if "=" not in tag:
+#         raise ValueError(f"Can't find value. {tag}")
+#     tag_name, value = tag.split("=")
+#     tags[tag_name] = Tag(tag_name, value, inner_text)
+#     return tag_name
 
-class Color(Enum):
-    black = (0, 30)
-    red = (0, 31)
-    green = (0, 32)
-    yellow = (0, 33)
-    blue = (0, 34)
-    purple = (0, 35)
-    cyan = (0, 36)
-    gray = (0, 37)
+# def parse_tags(text: str):
+#     tags: Dict[str, Tag] = dict()
+#     tag = ""
+#     inner_text = ""
+#     closing = False
+#     for ch in text:
+#         if inner_text:
+#             print("pre", inner_text)
+#             inner_text += ch
+#             print("appended:", inner_text)
 
-
-ESCAPE_FONT = 38
-ESCAPE_BACKGROUND = 48
-
-
-class Colorizer:
-
-    def __init__(self) -> None:
-        pass
-
-    @staticmethod
-    @dispatch(str, Color)
-    def font(text: str, color: Color) -> str:
-        pass
-
-    @dispatch(str, int, int, int)  # type: ignore
-    @staticmethod
-    def font(text: str, r: int, g: int, b: int, end="") -> str:
-        return f"\033[{ESCAPE_FONT};2;{r};{g};{b}m{text}{end}"  # \033[0m
-
-    @dispatch(str, Color)
-    @staticmethod
-    def background(text: str, color: Color):
-        pass
-
-    @dispatch(str, int, int, int)  # type: ignore
-    @staticmethod
-    def background(text: str, r: int, g: int, b: int, end=""):
-        return f"\033[{ESCAPE_BACKGROUND};2;{r};{g};{b}m{text}{end}"  # \033[0m
-
+#         if ch == "<":
+#             tag = ch
+#         elif ch == ">":
+#             if tag:
+#                 tag += ch
+#                 tag_name = parse_tag_value(tags, tag, closing, inner_text)
+#                 inner_text = "."
+#         elif ch == "/":
+#             closing = True
+#             tag += ch
+#         else:
+#             if tag:
+#                 tag += ch
+#         print(tag)
+#         print(inner_text)
+#     return tags
 
 def main():
+    text = "<bg=red><font=green>Hello </font></bg><font=blue>World!</font>"
+    tags = parse_nested_tags(text)
+    print(tags)
+    for tag in tags:
+        print(tag[2], "font =", tag[0], ", bg =", tag[1])
+    # red("red")
+    # black("black")
+    # blue("blue")
+    # print(rgb("hi"))
+    # print(rgb("Hello World", 155, 150, 15, Style.Underline))
+    # print()
+    # # text = "<background=green><font=red>Hello, World!</font></background>"
+    # text = "<font=yellow><bg=red>Hello, World!</bg></font>"
+    # # colors = '|'.join(['.' + color.name[1:] for color in Color])
+    # # regul = r"(\<font=.*\>).*"
+    # # print(regul)
+    # # res = re.findall(regul, text)
+    # print(parse_tags(text))
+    # print(parse_nested_tags(text))
+    # print(text.find("<>"))
     # tag = "<background=green><font=red>Hello, World!</font></background>"
     # tag_name, tag_value, tag_text = parse_tags(tag)
     # print("Tag Name:", tag_name)
@@ -142,17 +170,32 @@ def main():
     # Пример использования
 
     # print("\033[38;2;142;222;212mHello World!")
-    font = Colorizer.font("Hello", 242, 255, 22, end="") + Colorizer.font(
-        "World", 15, 2, 123
-    )
+    # cl = Colorizer()
+    # print()
+    # Colorizer.Red("test")
+    # Colorizer.colorize("test", Color.Red)
+    # Colorizer.Green("tesxt")
+    # print(cl.green("test"))
+    # print(cl.red("t"))
+    # print(Colorizer.font("test2", Color.Green))
+    # print("testtest")
+    # print("testtest")
+    # print(Colorizer.background("Hello", Color.Blue))
+    # print(Colorizer.font("Hello World!", Color.Black, Style.Blink))
+    # print("testtest")
+    # print("testtest")
 
-    print(font)
+    # font = Colorizer.font("Hello", 242, 255, 22, end="") + Colorizer.font(
+    #     "World", 15, 2, 123
+    # )
 
-    back = Colorizer.background(font, 255, 255, 255)
-    print(back)
-    print("test")
-    print("test")
-    print("test")
+    # print(font)
+
+    # back = Colorizer.background(font, 255, 255, 255)
+    # print(back)
+    # print("test")
+    # print("test")
+    # print("test")
 
     # Colorizer.font(Color.red)
 

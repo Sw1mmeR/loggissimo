@@ -10,8 +10,6 @@ from datetime import datetime
 from weakref import WeakValueDictionary
 from typing import IO, Callable, Dict, List, Optional, Self, Tuple
 
-from .style import Style
-from ._colorizer import _colorize
 from .exceptions import LoggissimoError
 from .constants import DEFAULT_LOGGER_NAME, Level
 from ._utils import print_trace, get_module_combinations
@@ -35,7 +33,6 @@ class __LoggerMeta(type):
                 if stream.name == "<stdout>":
                     continue
             stream.close()
-
 
 class _Logger(metaclass=__LoggerMeta):
     _level = Level.INFO

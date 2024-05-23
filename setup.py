@@ -10,4 +10,7 @@ setup(
     package_data={
         loggissimo.__name__: ["py.typed"],
     },
+    install_requires=[
+        # "multipledispatch",
+    ],
 )
