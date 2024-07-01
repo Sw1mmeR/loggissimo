@@ -47,9 +47,10 @@ class _Logger(metaclass=__LoggerMeta):
         self._name_: str = kwargs.get("name", DEFAULT_LOGGER_NAME)
         self._force_colorize: bool = kwargs.get("force_colorize", False)
         self._format: str = kwargs.get("format", "$name@ $time |$level| $stack: $text")
-        self._time_format = kwargs.get("time", "%Y-%m-%d %H:%M:%S")
+        self._time_format = kwargs.get("time", "%H:%M:%S")  # %Y-%m-%d
         self._streams = {stream.name: stream}
         self._proc_name = ""
+        self.rgb = kwargs.get("rgb", True)
 
     def _check_threading(self) -> bool:
         """
@@ -105,7 +106,7 @@ class _Logger(metaclass=__LoggerMeta):
             if do_not_colorize:
                 msg_t = self._format
             else:
-                msg_t = style(self._format, level)
+                msg_t = style(self._format, level, not self.rgb)
 
             return (
                 Template(msg_t).safe_substitute(
@@ -218,6 +219,14 @@ class Logger(_Logger):
         if isinstance(level, str):
             level = Level[level]
         _Logger._level = level
+
+    @property
+    def format(self) -> str:
+        return self._format
+
+    @format.setter
+    def format(self, new_format: str) -> None:
+        self._format = new_format
 
     def enable(self, module: Optional[str] = None) -> None:
         self._change_module_status(module, True)

@@ -1,14 +1,14 @@
 import re
 from string import Template
-from typing import Dict, List, Literal
+from typing import Callable, Dict, List
 
 from loggissimo.constants import Level
 from colorcall import Color, FontStyle, rgb, basic
 
 
-level_colors = {
+level_colors_rgb = {
     Level.INFO: [(255, 255, 255), (-1, -1, -1)],
-    Level.SUCCESS: [(25, 255, 0), (-1, -1, -1)],
+    Level.SUCCESS: [(40, 170, 90), (-1, -1, -1)],
     Level.WARNING: [(225, 255, 0), (-1, -1, -1)],
     Level.ERROR: [(255, 50, 50), (-1, -1, -1)],
     Level.CRITICAL: [
@@ -20,31 +20,49 @@ level_colors = {
     Level.DELETE: [(85, 90, 120), (-1, -1, -1)],
 }
 
+level_colors_basic = {
+    Level.INFO: [Color.white, Color.default],
+    Level.SUCCESS: [Color.green, Color.default],
+    Level.WARNING: [Color.yellow, Color.default],
+    Level.ERROR: [Color.red, Color.default],
+    Level.CRITICAL: [
+        Color.black,
+        Color.red,
+    ],
+    Level.DEBUG: [Color.blue, Color.default],
+    Level.TRACE: [Color.cyan, Color.default],
+    Level.DELETE: [Color.purple, Color.default],
+}
 
-def style(format: str, level: Level) -> str:
+
+def style(format: str, level: Level, basic_colors: bool = False) -> str:
     style_format = re.findall(
         r"(\<.*?>).*?(\$\w*)",
         format,
     )
+    callback: Callable = basic if basic_colors else rgb  # type: ignore
+    level_colors: Dict[Level, tuple] = (
+        level_colors_basic if basic_colors else level_colors_rgb  # type: ignore
+    )
     styled: Dict[str, str] = {
-        "name": rgb(
+        "name": callback(
             "$name",
-            (255, 250, 20),
+            Color.yellow if basic_colors else (255, 208, 5),
             style=FontStyle.italic,
         ),
-        "time": rgb("$time", (40, 115, 40)),
-        "level": rgb(
+        "time": callback("$time", Color.green if basic_colors else (40, 115, 40)),
+        "level": callback(
             "$level",
             level_colors[level][0],
             bgcolor=level_colors[level][1],
             style=FontStyle.bold,
         ),
-        "stack": rgb(
+        "stack": callback(
             "$stack",
-            (20, 100, 110),
+            Color.cyan if basic_colors else (20, 100, 110),
             style=FontStyle.underline,
         ),
-        "text": rgb(
+        "text": callback(
             "$text",
             level_colors[level][0],
             bgcolor=level_colors[level][1],
