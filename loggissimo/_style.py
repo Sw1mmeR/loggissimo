@@ -35,7 +35,12 @@ level_colors_basic = {
 }
 
 
-def style(format: str, level: Level, basic_colors: bool = False) -> str:
+def style(
+    format: str,
+    level: Level,
+    basic_colors: bool = False,
+    only_remove_tags: bool = False,
+) -> str:
     style_format = re.findall(
         r"(\<.*?>).*?(\$\w*)",
         format,
@@ -74,6 +79,9 @@ def style(format: str, level: Level, basic_colors: bool = False) -> str:
         format = format.replace(style, "")
         tag = Tag(style, value)
         styled[value[1:]] = tag.colorized
+
+    if only_remove_tags:
+        return format
 
     return Template(format).safe_substitute(**styled)
 

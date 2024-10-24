@@ -10,7 +10,7 @@ from typing import IO, Callable, Dict, List, Optional, Self, Tuple
 
 from ._style import style
 from .exceptions import LoggissimoError
-from .constants import DEFAULT_LOGGER_NAME, Level
+from .constants import DEFAULT_FORMAT, DEFAULT_LOGGER_NAME, Level
 from ._utils import print_trace, get_module_combinations
 
 
@@ -39,6 +39,7 @@ class _Logger(metaclass=__LoggerMeta):
     _modules: Dict[str, Tuple[bool, bool]] = {"__main__": (True, True)}
     _cached_level: dict = {}
     _aggregated_streams: Dict[str, IO] = dict()
+    _rgb: bool = True
 
     def __new__(cls, *args, **kwargs) -> Self:
         return super().__new__(cls)
@@ -46,11 +47,10 @@ class _Logger(metaclass=__LoggerMeta):
     def __init__(self, stream: IO = sys.stdout, *args, **kwargs) -> None:
         self._name_: str = kwargs.get("name", DEFAULT_LOGGER_NAME)
         self._force_colorize: bool = kwargs.get("force_colorize", False)
-        self._format: str = kwargs.get("format", "$name@ $time |$level| $stack: $text")
+        self._format: str = kwargs.get("format", DEFAULT_FORMAT)
         self._time_format = kwargs.get("time", "%H:%M:%S")  # %Y-%m-%d
         self._streams = {stream.name: stream}
         self._proc_name = ""
-        self.rgb = kwargs.get("rgb", True)
 
     def _check_threading(self) -> bool:
         """
@@ -103,10 +103,7 @@ class _Logger(metaclass=__LoggerMeta):
 
     def _log(self, level: Level, message: str):
         def colorize(do_not_colorize: bool):
-            if do_not_colorize:
-                msg_t = self._format
-            else:
-                msg_t = style(self._format, level, not self.rgb)
+            msg_t = style(self._format, level, not _Logger._rgb, do_not_colorize)
 
             return (
                 Template(msg_t).safe_substitute(
@@ -138,7 +135,7 @@ class _Logger(metaclass=__LoggerMeta):
             else f"{formatted_time}"
         )
 
-        stack = f"{module}:{frame.f_code.co_name}:{frame.f_lineno}"
+        stack = f"{module.replace('.', '/')}:{frame.f_lineno} {frame.f_code.co_name}"
         name = (
             f"{self._name_:8} {f'({self._proc_name})':8}"
             if self._proc_name
@@ -227,6 +224,14 @@ class Logger(_Logger):
     @format.setter
     def format(self, new_format: str) -> None:
         self._format = new_format
+
+    @property
+    def rgb(self) -> bool:
+        return _Logger._rgb
+
+    @rgb.setter
+    def rgb(self, value: bool) -> None:
+        _Logger._rgb = value
 
     def enable(self, module: Optional[str] = None) -> None:
         self._change_module_status(module, True)
