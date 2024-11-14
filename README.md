@@ -68,7 +68,7 @@ logger.disable()
 
 # module/engine.py
 def do_somthing():
-    logger.info("I'm in module funtcion")
+    logger.info("I'm in module function")
 
 # main.py
 do_somthing() # The output is empty
