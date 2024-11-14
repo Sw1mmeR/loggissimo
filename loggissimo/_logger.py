@@ -38,7 +38,7 @@ class _Logger(metaclass=__LoggerMeta):
     _level = Level.INFO
     _modules: Dict[str, Tuple[bool, bool]] = {"__main__": (True, True)}
     _cached_level: dict = {}
-    _aggregated_streams: Dict[str, Tuple[IO, str]] = dict()
+    _aggregated_streams: Dict[str, Tuple[IO, str, Level | str]] = dict()
     _rgb: bool = True
     _streams: dict = {}
 
@@ -211,8 +211,8 @@ class Logger(_Logger):
             **kwargs,
         )
 
-        for stream, format in _Logger._aggregated_streams.values():
-            self.add(stream, format)
+        for stream, format, stream_level in _Logger._aggregated_streams.values():
+            self.add(stream, format, stream_level)
 
         if isinstance(level, str):
             level = Level[level]
@@ -299,7 +299,9 @@ class Logger(_Logger):
 
     @classmethod
     @_Logger._catch
-    def addall(cls, stream: IO | str, format: str = "") -> None:
+    def addall(
+        cls, stream: IO | str, format: str = "", level: Level | str | None = None
+    ) -> None:
         """
         Add stream to ALL logger instances.
 
@@ -314,10 +316,15 @@ class Logger(_Logger):
             except KeyError:
                 stream = open(stream, "w+", buffering=1)
 
-        cls._aggregated_streams[stream.name] = (stream, format)
+        if level is None:
+            level = _Logger._level
+        elif isinstance(level, str):
+            level = Level[level]
+
+        cls._aggregated_streams[stream.name] = (stream, format, level)  # type: ignore
 
         for instance in cls._instances.values():
-            instance._streams[stream.name] = (stream, format)
+            instance._streams[stream.name] = (stream, format, level)
 
     @_Logger._catch
     def add(
