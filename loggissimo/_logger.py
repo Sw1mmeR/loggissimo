@@ -38,8 +38,9 @@ class _Logger(metaclass=__LoggerMeta):
     _level = Level.INFO
     _modules: Dict[str, Tuple[bool, bool]] = {"__main__": (True, True)}
     _cached_level: dict = {}
-    _aggregated_streams: Dict[str, IO] = dict()
+    _aggregated_streams: Dict[str, Tuple[IO, str]] = dict()
     _rgb: bool = True
+    _streams: dict = {}
 
     def __new__(cls, *args, **kwargs) -> Self:
         return super().__new__(cls)
@@ -49,7 +50,10 @@ class _Logger(metaclass=__LoggerMeta):
         self._force_colorize: bool = kwargs.get("force_colorize", False)
         self._format: str = kwargs.get("format", DEFAULT_FORMAT)
         self._time_format = kwargs.get("time", "%H:%M:%S")  # %Y-%m-%d
-        self._streams = {stream.name: stream}
+        try:
+            self._streams = {stream.name: (stream, self._format)}
+        except:
+            pass
         self._proc_name = ""
 
     def _check_threading(self) -> bool:
@@ -101,9 +105,14 @@ class _Logger(metaclass=__LoggerMeta):
 
         return _decorator
 
-    def _log(self, level: Level, message: str):
-        def colorize(do_not_colorize: bool):
-            msg_t = style(self._format, level, not _Logger._rgb, do_not_colorize)
+    def _log(self, level: Level, message: str) -> str:
+        def colorize(do_not_colorize: bool, format_: str):
+            msg_t = style(
+                format_ if format_ else self._format,
+                level,
+                not _Logger._rgb,
+                do_not_colorize,
+            )
 
             return (
                 Template(msg_t).safe_substitute(
@@ -148,11 +157,13 @@ class _Logger(metaclass=__LoggerMeta):
                 "No streams found. It could have happened that you cleared the list of streams and then did not add a stream."
             )
 
-        for stream in self._streams.values():
+        for stream, format in self._streams.values():
+            colorize_ = True
             if self._force_colorize or stream.name == "<stdout>":
-                stream.write(colorize(False))
-                continue
-            stream.write(colorize(True))
+                colorize_ = False
+            stream.write(colorize(colorize_, format))
+
+        return message
 
     def _change_module_status(
         self, module: Optional[str], action: bool, path: str = ""
@@ -174,7 +185,7 @@ class _Logger(metaclass=__LoggerMeta):
         return f"<loggissimo.logger level={Logger.level} streams={self._streams}>"
 
     def __del__(self) -> None:
-        for stream in self._streams.values():
+        for stream, format in self._streams.values():
             try:
                 _Logger._aggregated_streams[stream.name]
                 continue
@@ -196,8 +207,8 @@ class Logger(_Logger):
             **kwargs,
         )
 
-        for stream in _Logger._aggregated_streams.values():
-            self.add(stream)
+        for stream, format in _Logger._aggregated_streams.values():
+            self.add(stream, format)
 
         if isinstance(level, str):
             level = Level[level]
@@ -251,36 +262,36 @@ class Logger(_Logger):
         self._change_module_status(module.__name__, False, path=file)
 
     @_Logger._catch
-    def info(self, message: str = "") -> None:
-        self._log(Level.INFO, message)
+    def info(self, message: str = "") -> str:
+        return self._log(Level.INFO, message)
 
     @_Logger._catch
-    def debug(self, message: str = "") -> None:
-        self._log(Level.DEBUG, message)
+    def debug(self, message: str = "") -> str:
+        return self._log(Level.DEBUG, message)
 
     @_Logger._catch
-    def trace(self, message: str = "") -> None:
-        self._log(Level.TRACE, message)
+    def trace(self, message: str = "") -> str:
+        return self._log(Level.TRACE, message)
 
     @_Logger._catch
-    def success(self, message: str = "") -> None:
-        self._log(Level.SUCCESS, message)
+    def success(self, message: str = "") -> str:
+        return self._log(Level.SUCCESS, message)
 
     @_Logger._catch
-    def warning(self, message: str = "") -> None:
-        self._log(Level.WARNING, message)
+    def warning(self, message: str = "") -> str:
+        return self._log(Level.WARNING, message)
 
     @_Logger._catch
-    def error(self, message: str = "") -> None:
-        self._log(Level.ERROR, message)
+    def error(self, message: str = "") -> str:
+        return self._log(Level.ERROR, message)
 
     @_Logger._catch
-    def critical(self, message: str = "") -> None:
-        self._log(Level.CRITICAL, message)
+    def critical(self, message: str = "") -> str:
+        return self._log(Level.CRITICAL, message)
 
     @_Logger._catch
-    def destructor(self, message: str = "") -> None:
-        self._log(Level.DELETE, message)
+    def destructor(self, message: str = "") -> str:
+        return self._log(Level.DELETE, message)
 
     @classmethod
     @_Logger._catch
@@ -299,10 +310,10 @@ class Logger(_Logger):
             except KeyError:
                 stream = open(stream, "w+", buffering=1)
 
-        cls._aggregated_streams[stream.name] = stream
+        cls._aggregated_streams[stream.name] = (stream, format)
 
         for instance in cls._instances.values():
-            instance._streams[stream.name] = stream
+            instance._streams[stream.name] = (stream, format)
 
     @_Logger._catch
     def add(self, stream: IO | str, format: str = "") -> None:
@@ -317,7 +328,7 @@ class Logger(_Logger):
             if self._streams.get(stream, False):
                 return
             stream = open(stream, "w+", buffering=1)
-        self._streams[stream.name] = stream
+        self._streams[stream.name] = (stream, format)
 
     @_Logger._catch
     def remove(self, name: str) -> None:
