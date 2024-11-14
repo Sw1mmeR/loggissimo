@@ -51,7 +51,7 @@ class _Logger(metaclass=__LoggerMeta):
         self._format: str = kwargs.get("format", DEFAULT_FORMAT)
         self._time_format = kwargs.get("time", "%H:%M:%S")  # %Y-%m-%d
         try:
-            self._streams = {stream.name: (stream, self._format)}
+            self._streams = {stream.name: (stream, self._format, self._level)}
         except:
             pass
         self._proc_name = ""
@@ -71,15 +71,17 @@ class _Logger(metaclass=__LoggerMeta):
 
         return _threading
 
-    def _is_enabled(self, level: Level, module: str) -> bool:
+    def _is_enabled(self, stream, level: Level, module: str) -> bool:
         """
         Checking logging capability
         """
         try:
-            cached_level = _Logger._cached_level[level]
+            cached_level = _Logger._cached_level[(stream, level)]
         except KeyError:
-            _Logger._cached_level[level] = self._valid_log_level(level)
-            cached_level = _Logger._cached_level[level]
+            _Logger._cached_level[(stream, level)] = self._valid_log_level(
+                stream, level
+            )
+            cached_level = _Logger._cached_level[(stream, level)]
         try:
             is_module, cached_module = _Logger._modules[module]
             return cached_level and cached_module
@@ -92,8 +94,8 @@ class _Logger(metaclass=__LoggerMeta):
                 cached_module = _Logger._modules[mod] = (is_module, True)
         return cached_level and cached_module
 
-    def _valid_log_level(self, level: Level):
-        return level >= _Logger._level
+    def _valid_log_level(self, stream, level: Level):
+        return level >= self._streams[stream.name][2]
 
     @staticmethod
     def _catch(func: Callable):
@@ -134,8 +136,8 @@ class _Logger(metaclass=__LoggerMeta):
         except KeyError:
             module = None
 
-        if not self._is_enabled(level, module):
-            return
+        # if not self._is_enabled(level, module):
+        #     return
 
         formatted_time = time_now.strftime(self._time_format)
         time = (
@@ -157,11 +159,13 @@ class _Logger(metaclass=__LoggerMeta):
                 "No streams found. It could have happened that you cleared the list of streams and then did not add a stream."
             )
 
-        for stream, format in self._streams.values():
+        for stream, stream_format, stream_level in self._streams.values():
             colorize_ = True
+            if not self._is_enabled(stream, level, module):
+                continue
             if self._force_colorize or stream.name == "<stdout>":
                 colorize_ = False
-            stream.write(colorize(colorize_, format))
+            stream.write(colorize(colorize_, stream_format))
 
         return message
 
@@ -185,7 +189,7 @@ class _Logger(metaclass=__LoggerMeta):
         return f"<loggissimo.logger level={Logger.level} streams={self._streams}>"
 
     def __del__(self) -> None:
-        for stream, format in self._streams.values():
+        for stream, format, level in self._streams.values():
             try:
                 _Logger._aggregated_streams[stream.name]
                 continue
@@ -316,7 +320,9 @@ class Logger(_Logger):
             instance._streams[stream.name] = (stream, format)
 
     @_Logger._catch
-    def add(self, stream: IO | str, format: str = "") -> None:
+    def add(
+        self, stream: IO | str, format: str = "", level: Level | str | None = None
+    ) -> None:
         """
         Add stream to logger instance output.
 
@@ -328,7 +334,13 @@ class Logger(_Logger):
             if self._streams.get(stream, False):
                 return
             stream = open(stream, "w+", buffering=1)
-        self._streams[stream.name] = (stream, format)
+
+        if level is None:
+            level = self.level
+        elif isinstance(level, str):
+            level = Level[level]
+
+        self._streams[stream.name] = (stream, format, level)
 
     @_Logger._catch
     def remove(self, name: str) -> None:
