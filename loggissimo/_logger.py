@@ -294,8 +294,8 @@ class Logger(_Logger):
         return self._log(Level.CRITICAL, message)
 
     @_Logger._catch
-    def destructor(self, message: str = "") -> str:
-        return self._log(Level.DELETE, message)
+    def excessive(self, message: str = "") -> str:
+        return self._log(Level.EXCESSIVE, message)
 
     @classmethod
     @_Logger._catch

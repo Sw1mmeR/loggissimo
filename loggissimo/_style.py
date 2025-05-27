@@ -17,7 +17,7 @@ level_colors_rgb = {
     ],
     Level.DEBUG: [(20, 100, 250), (-1, -1, -1)],
     Level.TRACE: [(1, 210, 255), (-1, -1, -1)],
-    Level.DELETE: [(85, 90, 120), (-1, -1, -1)],
+    Level.EXCESSIVE: [(85, 90, 120), (-1, -1, -1)],
 }
 
 level_colors_basic = {
@@ -31,7 +31,7 @@ level_colors_basic = {
     ],
     Level.DEBUG: [Color.blue, Color.default],
     Level.TRACE: [Color.cyan, Color.default],
-    Level.DELETE: [Color.purple, Color.default],
+    Level.EXCESSIVE: [Color.purple, Color.default],
 }
 
 

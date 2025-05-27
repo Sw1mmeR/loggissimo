@@ -10,8 +10,8 @@ DEFAULT_FORMAT: Final[str] = "$name@ $time |$level| $stack: $text"
 
 
 class Level(IntEnum):
+    EXCESSIVE = 1
     TRACE = 5
-    DELETE = 9
     DEBUG = 10
     INFO = 20
     SUCCESS = 25
