@@ -75,12 +75,8 @@ class _Logger(metaclass=__LoggerMeta):
         """
         Checking logging capability
         """
-        print("check enable")
         if level is None:
             level = _Logger._level
-        print("!!")
-        print(_Logger._cached_level)
-        print("!!")
         try:
             cached_level = _Logger._cached_level[(stream, level)]
         except KeyError:
@@ -90,22 +86,15 @@ class _Logger(metaclass=__LoggerMeta):
             cached_level = _Logger._cached_level[(stream, level)]
         try:
             is_module, cached_module = _Logger._modules[module]
-            print("module", module)
-            print("is_module", is_module)
-            print("cached", cached_module)
-            print("level", cached_level)
-            print(f"return 1 {cached_level} {cached_module}")
             return cached_level and cached_module
         except KeyError:
             modules: List[str] = get_module_combinations(module)
             for mod in modules:
                 is_module, cached_module = _Logger._modules.get(mod, (False, None))  # type: ignore
                 if cached_module is not None:
-                    print(f"return 2 {cached_level} {cached_module}")
                     return cached_module and cached_level
                 _Logger._modules[mod] = (is_module, True)
                 cached_module = True
-        print(f"return 3 {cached_level} {cached_module}")
         return cached_level and cached_module
 
     def _valid_log_level(self, stream, level: Level | None):
@@ -136,7 +125,7 @@ class _Logger(metaclass=__LoggerMeta):
                 Template(msg_t).safe_substitute(
                     name=f"{name:30}",
                     time=f"{time}",
-                    level=f"{level.name:<8}",
+                    level=f"{level.name:<9}",
                     stack=f"{stack}",
                     text=f"{message}",
                 )
@@ -152,15 +141,8 @@ class _Logger(metaclass=__LoggerMeta):
         except KeyError:
             module = None
 
-        # if not self._is_enabled(level, module):
-        #     return
-
         formatted_time = time_now.strftime(self._time_format)
-        time = (
-            f"{'.' * len(formatted_time)}"
-            if level == Level.DELETE
-            else f"{formatted_time}"
-        )
+        time = formatted_time
 
         stack = f"{module.replace('.', '/')}:{frame.f_lineno} {frame.f_code.co_name}"
         name = (
@@ -178,7 +160,6 @@ class _Logger(metaclass=__LoggerMeta):
         for stream, stream_format, stream_level in self._streams.values():
             colorize_ = True
             enabled = self._is_enabled(stream, level, module)
-            print(f"!{enabled}")
             if not enabled:
                 continue
             if self._force_colorize or stream.name == "<stdout>":
@@ -312,8 +293,8 @@ class Logger(_Logger):
         return self._log(Level.CRITICAL, message)
 
     @_Logger._catch
-    def destructor(self, message: str = "") -> str:
-        return self._log(Level.DELETE, message)
+    def excessive(self, message: str = "") -> str:
+        return self._log(Level.EXCESSIVE, message)
 
     @classmethod
     @_Logger._catch
