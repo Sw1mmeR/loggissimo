@@ -51,7 +51,7 @@ class _Logger(metaclass=__LoggerMeta):
         self._format: str = kwargs.get("format", DEFAULT_FORMAT)
         self._time_format = kwargs.get("time", "%H:%M:%S")  # %Y-%m-%d
         try:
-            self._streams = {stream.name: (stream, self._format, self._level)}
+            self._streams = {stream.name: (stream, self._format, None)}
         except:
             pass
         self._proc_name = ""
@@ -71,10 +71,13 @@ class _Logger(metaclass=__LoggerMeta):
 
         return _threading
 
-    def _is_enabled(self, stream, level: Level, module: str) -> bool:
+    def _is_enabled(self, stream, level: Level | None, module: str) -> bool:
         """
         Checking logging capability
         """
+        print("check enable")
+        if level is None:
+            level = _Logger._level
         try:
             cached_level = _Logger._cached_level[(stream, level)]
         except KeyError:
@@ -83,18 +86,28 @@ class _Logger(metaclass=__LoggerMeta):
             )
             cached_level = _Logger._cached_level[(stream, level)]
         try:
+            print("1 modules", _Logger._modules)
+            print("\tmodule", module)
             is_module, cached_module = _Logger._modules[module]
+            print("1 is, cached", is_module, cached_module)
             return cached_level and cached_module
         except KeyError:
             modules: List[str] = get_module_combinations(module)
+            print("modules", modules)
             for mod in modules:
+                print(f"\t{mod}")
                 is_module, cached_module = _Logger._modules.get(mod, (False, None))  # type: ignore
                 if cached_module is not None:
+                    print("4 cached_module, cached_level", cached_module, cached_level)
                     return cached_module and cached_level
                 cached_module = _Logger._modules[mod] = (is_module, True)
+            print("2 is, cached", is_module, cached_module)
+        print("3 cached_level, cached_module", cached_level, cached_module)
         return cached_level and cached_module
 
-    def _valid_log_level(self, stream, level: Level):
+    def _valid_log_level(self, stream, level: Level | None):
+        if self._streams[stream.name][2] is None:
+            return level >= _Logger._level
         return level >= self._streams[stream.name][2]
 
     @staticmethod
@@ -161,6 +174,8 @@ class _Logger(metaclass=__LoggerMeta):
 
         for stream, stream_format, stream_level in self._streams.values():
             colorize_ = True
+            enabled = self._is_enabled(stream, level, module)
+            print(f"!{enabled}")
             if not self._is_enabled(stream, level, module):
                 continue
             if self._force_colorize or stream.name == "<stdout>":
