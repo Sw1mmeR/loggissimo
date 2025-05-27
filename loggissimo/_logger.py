@@ -51,7 +51,7 @@ class _Logger(metaclass=__LoggerMeta):
         self._format: str = kwargs.get("format", DEFAULT_FORMAT)
         self._time_format = kwargs.get("time", "%H:%M:%S")  # %Y-%m-%d
         try:
-            self._streams = {stream.name: (stream, self._format, self._level)}
+            self._streams = {stream.name: (stream, self._format, None)}
         except:
             pass
         self._proc_name = ""
@@ -71,10 +71,12 @@ class _Logger(metaclass=__LoggerMeta):
 
         return _threading
 
-    def _is_enabled(self, stream, level: Level, module: str) -> bool:
+    def _is_enabled(self, stream, level: Level | None, module: str) -> bool:
         """
         Checking logging capability
         """
+        if level is None:
+            level = _Logger._level
         try:
             cached_level = _Logger._cached_level[(stream, level)]
         except KeyError:
@@ -91,10 +93,13 @@ class _Logger(metaclass=__LoggerMeta):
                 is_module, cached_module = _Logger._modules.get(mod, (False, None))  # type: ignore
                 if cached_module is not None:
                     return cached_module and cached_level
-                cached_module = _Logger._modules[mod] = (is_module, True)
+                _Logger._modules[mod] = (is_module, True)
+                cached_module = True
         return cached_level and cached_module
 
-    def _valid_log_level(self, stream, level: Level):
+    def _valid_log_level(self, stream, level: Level | None):
+        if self._streams[stream.name][2] is None:
+            return level >= _Logger._level
         return level >= self._streams[stream.name][2]
 
     @staticmethod
@@ -120,7 +125,7 @@ class _Logger(metaclass=__LoggerMeta):
                 Template(msg_t).safe_substitute(
                     name=f"{name:30}",
                     time=f"{time}",
-                    level=f"{level.name:<8}",
+                    level=f"{level.name:<9}",
                     stack=f"{stack}",
                     text=f"{message}",
                 )
@@ -136,15 +141,8 @@ class _Logger(metaclass=__LoggerMeta):
         except KeyError:
             module = None
 
-        # if not self._is_enabled(level, module):
-        #     return
-
         formatted_time = time_now.strftime(self._time_format)
-        time = (
-            f"{'.' * len(formatted_time)}"
-            if level == Level.DELETE
-            else f"{formatted_time}"
-        )
+        time = formatted_time
 
         stack = f"{module.replace('.', '/')}:{frame.f_lineno} {frame.f_code.co_name}"
         name = (
@@ -161,7 +159,8 @@ class _Logger(metaclass=__LoggerMeta):
 
         for stream, stream_format, stream_level in self._streams.values():
             colorize_ = True
-            if not self._is_enabled(stream, level, module):
+            enabled = self._is_enabled(stream, level, module)
+            if not enabled:
                 continue
             if self._force_colorize or stream.name == "<stdout>":
                 colorize_ = False
