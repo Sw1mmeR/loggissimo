@@ -2,4 +2,4 @@ from ._logger import Logger, Level
 
 logger = Logger()
 
-__version__ = "2.0.6"
+__version__ = "2.0.8"

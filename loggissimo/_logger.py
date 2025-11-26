@@ -63,6 +63,7 @@ class _Logger(metaclass=__LoggerMeta):
     _rgb: bool = True
     _level_global = Level.EXCESSIVE
     _modules: Dict[str, bool] = {"__main__": True}
+    _format: str = DEFAULT_FORMAT
 
     def __new__(cls, *args, **kwargs) -> Self:
         return super().__new__(cls)
@@ -73,13 +74,18 @@ class _Logger(metaclass=__LoggerMeta):
         self._name_: str = kwargs.get("name", DEFAULT_LOGGER_NAME)
 
         self._force_colorize: bool = kwargs.get("force_colorize", False)
-        self._format: str = kwargs.get("format", DEFAULT_FORMAT)
+        # _Logger._format: str = kwargs.get("format", _Logger.format)
         self._time_format = kwargs.get("time", "%H:%M:%S")  # %Y-%m-%d
 
         try:
-            self.streams = {stream.name: LoggissimoIO(stream)}
+            self.streams = {
+                stream.name: LoggissimoIO(
+                    stream, format=kwargs.get("format", self.format)
+                )
+            }
         except:
             pass
+
         self._proc_name = ""
 
         self.level = level
@@ -124,11 +130,11 @@ class _Logger(metaclass=__LoggerMeta):
 
     @property
     def format(self) -> str:
-        return self._format
+        return _Logger._format
 
     @format.setter
     def format(self, new_format: str) -> None:
-        self._format = new_format
+        _Logger._format = new_format
         list(self.streams.values())[0].format = new_format
 
     @property
@@ -363,7 +369,8 @@ class Logger(_Logger):
         )
 
         for stream in _Logger.streams_shared.values():
-            self.add(stream, stream.level, stream.format)  # type: ignore
+            format = stream.format if stream.format else self.format
+            self.add(stream, stream.level, format)  # type: ignore
 
     @classmethod
     @_Logger._catch
