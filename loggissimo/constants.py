@@ -7,9 +7,11 @@ START_LOGGER_TRACE: Final[str] = "[Start Loggissimo Trace]"
 END_LOGGER_TRACE: Final[str] = "[End Loggissimo Trace]"
 
 DEFAULT_FORMAT: Final[str] = "$name@ $time |$level| $stack: $text"
+STDOUT: Final[str] = "<stdout>"
 
 
 class Level(IntEnum):
+    GLOBAL = 0
     EXCESSIVE = 1
     TRACE = 5
     DEBUG = 10

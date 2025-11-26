@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=42"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "loggissimo"
+description = "Awesome and simple logger"
+authors = [
+    { name = "MikleSedrakyan", email = "scriptdefender@yandex.ru" },
+    { name = "AfanasevAndrey", email = "scriptdefender@yandex.ru" }
+]
+license = { file = "LICENSE" }
+readme = {file = "README.md", content-type = "text/markdown"}
+requires-python = ">=3.11"
+dynamic = ["version"]
+dependencies = ["colorcall>=0.2.1"]
+
+[project.urls]
+Homepage = "https://github.com/Sw1mmeR/loggissimo/tree/main"
+
+[project.optional-dependencies]
+testing = [
+    "pytest==7.4.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["loggissimo*"]
+
+[tool.setuptools.package-data]
+"loggissimo" = ["py.typed"]
+
+[tool.setuptools.dynamic]
+version = {attr = "loggissimo.__version__"}
