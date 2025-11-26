@@ -122,9 +122,6 @@ class _Logger(metaclass=__LoggerMeta):
 
         _Logger._level_global = level
 
-        for instance in _Logger._instances.values():
-            instance.level = level
-
     @property
     def format(self) -> str:
         return self._format
@@ -189,10 +186,16 @@ class _Logger(metaclass=__LoggerMeta):
         )
         # Module
         module_enabled = False
+        module_unknown = True
         for key in self._modules:
             if module.startswith(key):
+                module_unknown = False
                 module_enabled = self._modules[key]
                 break
+
+        if module_unknown:
+            # Если модуля нет в словаре, значить он по-умолчанию включен
+            module_enabled = self._modules[module] = True
 
         if not module_enabled:
             return False
@@ -209,19 +212,20 @@ class _Logger(metaclass=__LoggerMeta):
         return self._check_level(level, stream_level)
 
     def _check_level(self, level: Level, stream_level: Level) -> bool:
-        if level >= stream_level:
-            # Фильтр вывода в поток
-            return True
+        enabled = False
 
-        if level >= self.level:  # type: ignore
-            # Фильтр вывода логгера
-            return True
+        if self.global_level < self.level:  # type: ignore
+            return level >= self.global_level  # type: ignore
 
         # Фильтр вывода ВСЕХ логгеров
-        if level >= self.global_level:  # type: ignore
-            return True
-        else:
-            return False
+        enabled = level >= self.global_level  # type: ignore
+
+        # Фильтр вывода логгера
+        enabled = level >= self.level  # type: ignore
+
+        # Фильтр вывода в поток
+        enabled = level >= stream_level
+        return enabled
 
     def _write2streams(self, message: str, level, module, stack) -> None:
         streams = self.streams.copy()
@@ -386,7 +390,7 @@ class Logger(_Logger):
     def add(
         self,
         stream: IO | str,
-        level: Level | str = Level.GLOBAL,
+        level: Level | str | None = None,
         format: str = "",
     ) -> None:
         """
