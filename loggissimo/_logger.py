@@ -10,7 +10,7 @@ from typing import IO, Callable, Dict, Optional, Self
 
 from loggissimo._style import style
 from loggissimo._utils import print_trace
-from loggissimo.constants import DEFAULT_FORMAT, DEFAULT_LOGGER_NAME, Level
+from loggissimo.constants import DEFAULT_FORMAT, DEFAULT_LOGGER_NAME, STDOUT, Level
 
 
 class LoggissimoIO:
@@ -59,7 +59,7 @@ class __LoggerMeta(type):
 
 
 class _Logger(metaclass=__LoggerMeta):
-    streams_shared: dict = {}  # STDOUT: (sys.stdout, DEFAULT_FORMAT, None)
+    streams_shared: dict = {STDOUT: LoggissimoIO(sys.stdout, format=DEFAULT_FORMAT)}
     _rgb: bool = True
     _level_global = Level.EXCESSIVE
     _modules: Dict[str, bool] = {"__main__": True}
@@ -68,7 +68,7 @@ class _Logger(metaclass=__LoggerMeta):
     def __new__(cls, *args, **kwargs) -> Self:
         return super().__new__(cls)
 
-    def __init__(self, stream: IO = sys.stdout, level: Level | str = Level.INFO, *args, **kwargs) -> None:  # type: ignore
+    def __init__(self, stream: IO | None = None, level: Level | str = Level.INFO, *args, **kwargs) -> None:  # type: ignore
         self.streams: dict[str, LoggissimoIO] = {}
 
         self._name_: str = kwargs.get("name", DEFAULT_LOGGER_NAME)
@@ -78,21 +78,25 @@ class _Logger(metaclass=__LoggerMeta):
         self._time_format = kwargs.get("time", "%H:%M:%S")  # %Y-%m-%d
 
         try:
-            self.streams = {
-                stream.name: LoggissimoIO(
+            self.streams = {}
+            if stream:
+                self.streams[stream.name] = LoggissimoIO(
                     stream, format=kwargs.get("format", self.format)
                 )
-            }
         except:
             pass
 
         self._proc_name = ""
 
         self.level = level
+        self._level = level
         self._cached_level: dict = {}
 
     @property
     def level(self) -> Level | str:
+        if not (list(self.streams.values())):
+            return self._level
+
         if list(self.streams.values())[0].level == Level.GLOBAL:
             return self.global_level
         return list(self.streams.values())[0].level
@@ -112,7 +116,9 @@ class _Logger(metaclass=__LoggerMeta):
                     raise NotImplementedError(
                         f"level '{level}' is not implemented"
                     ) from None
-        list(self.streams.values())[0].level = level
+        self._level = level
+        if list(self.streams.values()):
+            list(self.streams.values())[0].level = level
 
     @property
     def global_level(self) -> Level | str:
@@ -135,7 +141,11 @@ class _Logger(metaclass=__LoggerMeta):
     @format.setter
     def format(self, new_format: str) -> None:
         _Logger._format = new_format
-        list(self.streams.values())[0].format = new_format
+
+        if list(self.streams.values()):
+            list(self.streams.values())[0].format = new_format
+        elif list(self.streams_shared.values()):
+            list(self.streams_shared.values())[0].format = new_format
 
     @property
     def rgb(self) -> bool:
@@ -362,7 +372,7 @@ class Logger(_Logger):
         self, file: str = "", level: Level | str = Level.INFO, *args, **kwargs
     ) -> None:
         super().__init__(
-            open(file, "w", buffering=1) if file else sys.stdout,  # type: ignore
+            open(file, "w", buffering=1) if file else None,  # type: ignore
             level=level,
             *args,
             **kwargs,
@@ -456,6 +466,9 @@ class Logger(_Logger):
         ------
             LoggissimoError: Stream not found
         """
+        for instance in Logger._instances.values():
+            instance.remove(name)
+
         if name in cls.streams_shared.keys():
             del cls.streams_shared[name]
 
